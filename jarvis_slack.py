@@ -134,7 +134,9 @@ def speak(text: str) -> None:
         f.write(resp.content)
         tmp = f.name
     try:
-        subprocess.run(["afplay", tmp], check=True)
+        if sys.platform == "darwin":
+            subprocess.run(["afplay", tmp], check=True)
+        # Railway(Linux)에서는 TTS 재생 스킵
     finally:
         os.unlink(tmp)
 
