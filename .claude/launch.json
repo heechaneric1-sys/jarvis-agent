@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["/Users/neungkeunkim/scripts/jarvis_server.py"],
       "port": 5001
+    },
+    {
+      "name": "jarvis-ui",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8181", "--directory", "/Users/neungkeunkim/scripts"],
+      "port": 8181
     }
   ]
 }
