@@ -187,105 +187,96 @@ scene.add(new THREE.Mesh(bgGeo, bgMat));
 const orbGroup = new THREE.Group();
 scene.add(orbGroup);
 
-/* 외부 반투명 구체 */
-const outerGeo = new THREE.SphereGeometry(1.6, 32, 32);
-const outerMat = new THREE.MeshBasicMaterial({
-  color:0x00aaff, transparent:true, opacity:0.04, wireframe:false, side:THREE.FrontSide
-});
-orbGroup.add(new THREE.Mesh(outerGeo, outerMat));
+/* ── 파티클 클라우드 (구체 형태, AdditiveBlending으로 글로우) ── */
+const TOTAL = 6000;
+const pos   = new Float32Array(TOTAL * 3);
+const sizes = new Float32Array(TOTAL);
 
-/* 와이어프레임 구체 */
-const wireGeo = new THREE.SphereGeometry(1.55, 18, 18);
-const wireMat = new THREE.MeshBasicMaterial({color:0x0066cc, wireframe:true, transparent:true, opacity:0.06});
-orbGroup.add(new THREE.Mesh(wireGeo, wireMat));
-
-/* ── 노드 & 연결선 ── */
-const NODE_COUNT = 120;
-const nodePositions = [];
-const nodeGroup = new THREE.Group();
-orbGroup.add(nodeGroup);
-
-// 구면 위 랜덤 노드
-const nodeSizes   = [];
-const nodeColors  = [];
-for(let i=0; i<NODE_COUNT; i++){
+for(let i = 0; i < TOTAL; i++){
+  // 구체 부피 안에 균일 분포 (안쪽 더 조밀)
+  const u   = Math.random();
+  const r   = 1.45 * Math.cbrt(u);          // cbrt → 부피 균일 분포
   const phi   = Math.acos(2*Math.random()-1);
-  const theta = Math.random()*Math.PI*2;
-  const r     = 1.3 + Math.random()*0.25;
-  const x = r*Math.sin(phi)*Math.cos(theta);
-  const y = r*Math.sin(phi)*Math.sin(theta);
-  const z = r*Math.cos(phi);
-  nodePositions.push(new THREE.Vector3(x,y,z));
-  nodeSizes.push(Math.random()>0.85 ? 0.032 : 0.015);
-  // 전부 파랑/청록 계열
-  const blues = [0x00D4FF, 0x0088FF, 0x44EEFF, 0x0055CC];
-  nodeColors.push(blues[Math.floor(Math.random()*blues.length)]);
+  const theta = Math.random() * Math.PI * 2;
+  pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  pos[i*3+2] = r * Math.cos(phi);
+  sizes[i]   = Math.random() > 0.95 ? 0.025 : 0.008 + Math.random() * 0.01;
 }
 
-// 노드 메시들
-nodePositions.forEach((pos,i)=>{
-  const geo = new THREE.SphereGeometry(nodeSizes[i],6,6);
-  const mat = new THREE.MeshBasicMaterial({color:nodeColors[i]});
-  const mesh = new THREE.Mesh(geo,mat);
-  mesh.position.copy(pos);
-  nodeGroup.add(mesh);
+const cloudGeo = new THREE.BufferGeometry();
+cloudGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+cloudGeo.setAttribute('size',     new THREE.Float32BufferAttribute(sizes, 1));
+
+const cloudMat = new THREE.PointsMaterial({
+  color: 0x1166ff,
+  size: 0.022,
+  transparent: true,
+  opacity: 0.85,
+  blending: THREE.AdditiveBlending,  // 겹칠수록 밝게 빛남
+  depthWrite: false,
+  sizeAttenuation: true,
 });
+const cloudPoints = new THREE.Points(cloudGeo, cloudMat);
+orbGroup.add(cloudPoints);
 
-// 연결선 (거리 0.7 이내)
-const lineGeo = new THREE.BufferGeometry();
-const lineVerts = [];
-for(let i=0;i<NODE_COUNT;i++){
-  for(let j=i+1;j<NODE_COUNT;j++){
-    if(nodePositions[i].distanceTo(nodePositions[j])<0.72){
-      lineVerts.push(nodePositions[i].x,nodePositions[i].y,nodePositions[i].z);
-      lineVerts.push(nodePositions[j].x,nodePositions[j].y,nodePositions[j].z);
-    }
-  }
+/* 중간층 — 조금 더 밝은 파티클 */
+const MID = 1500;
+const posM = new Float32Array(MID * 3);
+for(let i = 0; i < MID; i++){
+  const r   = 0.6 + Math.random() * 0.85;
+  const phi   = Math.acos(2*Math.random()-1);
+  const theta = Math.random() * Math.PI * 2;
+  posM[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  posM[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  posM[i*3+2] = r * Math.cos(phi);
 }
-lineGeo.setAttribute('position',new THREE.Float32BufferAttribute(lineVerts,3));
-const lineMat = new THREE.LineBasicMaterial({color:0x0077bb, transparent:true, opacity:0.25});
-orbGroup.add(new THREE.LineSegments(lineGeo, lineMat));
+const midGeo = new THREE.BufferGeometry();
+midGeo.setAttribute('position', new THREE.Float32BufferAttribute(posM, 3));
+const midMat = new THREE.PointsMaterial({
+  color: 0x44aaff,
+  size: 0.018,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+orbGroup.add(new THREE.Points(midGeo, midMat));
 
-/* ── 내부 코어 구체 ── */
-const coreGeo = new THREE.SphereGeometry(0.45,32,32);
-const coreMat = new THREE.MeshBasicMaterial({color:0x88eeff, transparent:true, opacity:0.45});
-const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-orbGroup.add(coreMesh);
+/* 코어 — 밝은 중심 */
+const CORE = 400;
+const posC = new Float32Array(CORE * 3);
+for(let i = 0; i < CORE; i++){
+  const r   = Math.random() * 0.4;
+  const phi   = Math.acos(2*Math.random()-1);
+  const theta = Math.random() * Math.PI * 2;
+  posC[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  posC[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  posC[i*3+2] = r * Math.cos(phi);
+}
+const coreGeo2 = new THREE.BufferGeometry();
+coreGeo2.setAttribute('position', new THREE.Float32BufferAttribute(posC, 3));
+const coreMat2 = new THREE.PointsMaterial({
+  color: 0xaaddff,
+  size: 0.025,
+  transparent: true,
+  opacity: 1.0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+orbGroup.add(new THREE.Points(coreGeo2, coreMat2));
 
-// 코어 내부 밝은 점
-const innerGeo = new THREE.SphereGeometry(0.22,16,16);
-const innerMat = new THREE.MeshBasicMaterial({color:0xeefcff, transparent:true, opacity:0.95});
-orbGroup.add(new THREE.Mesh(innerGeo,innerMat));
-
-/* ── 궤도 링 ── */
-function makeRing(r, tube, color, rotX, rotZ, opacity=0.3){
+/* 궤도 링 (얇게 유지) */
+function makeRing(r, tube, color, rotX, rotZ, opacity=0.25){
   const geo = new THREE.TorusGeometry(r, tube, 4, 80);
-  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity, wireframe:false});
+  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity});
   const m   = new THREE.Mesh(geo, mat);
-  m.rotation.x = rotX;
-  m.rotation.z = rotZ;
+  m.rotation.x = rotX; m.rotation.z = rotZ;
   return m;
 }
-orbGroup.add(makeRing(1.85, 0.004, 0x0088cc, Math.PI/2,   0,      0.35));
-orbGroup.add(makeRing(1.85, 0.004, 0x0088cc, Math.PI/4,   Math.PI/6, 0.2));
-orbGroup.add(makeRing(2.0,  0.003, 0x005577, Math.PI*0.6, Math.PI/3, 0.18));
-orbGroup.add(makeRing(2.15, 0.003, 0x004466, 0.2,         Math.PI/2, 0.15));
-
-/* ── 외부 파티클 ── */
-const PART_COUNT = 350;
-const partPositions = new Float32Array(PART_COUNT*3);
-for(let i=0;i<PART_COUNT;i++){
-  const phi   = Math.acos(2*Math.random()-1);
-  const theta = Math.random()*Math.PI*2;
-  const r     = 1.9 + Math.random()*1.4;
-  partPositions[i*3]   = r*Math.sin(phi)*Math.cos(theta);
-  partPositions[i*3+1] = r*Math.sin(phi)*Math.sin(theta);
-  partPositions[i*3+2] = r*Math.cos(phi);
-}
-const partGeo = new THREE.BufferGeometry();
-partGeo.setAttribute('position',new THREE.Float32BufferAttribute(partPositions,3));
-const partMat = new THREE.PointsMaterial({color:0x0099cc, size:0.015, transparent:true, opacity:0.5});
-scene.add(new THREE.Points(partGeo, partMat));
+orbGroup.add(makeRing(1.7, 0.003, 0x0055aa, Math.PI/2,    0,         0.3));
+orbGroup.add(makeRing(1.7, 0.003, 0x0044aa, Math.PI/4,    Math.PI/6, 0.18));
+orbGroup.add(makeRing(1.85,0.002, 0x003377, Math.PI*0.6,  Math.PI/3, 0.15));
 
 /* ── 애니메이션 상태 ── */
 let appMode = 'idle';
@@ -322,8 +313,9 @@ renderer.setAnimationLoop(()=>{
   nodeGroup.rotation.y -= dt * 0.04;
 
   // 코어 펄스
-  const coreAlpha = 0.5 + 0.3*Math.abs(Math.sin(breathT*1.5));
-  coreMat.opacity = coreAlpha;
+  const coreAlpha = 0.85 + 0.15*Math.abs(Math.sin(breathT*1.5));
+  coreMat2.opacity = coreAlpha;
+  cloudMat.opacity = 0.7 + 0.15*Math.abs(Math.sin(breathT*0.8));
 
   renderer.render(scene, camera);
 });
