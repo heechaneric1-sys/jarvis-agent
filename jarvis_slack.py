@@ -452,6 +452,28 @@ AGENT_SYSTEMS = {
 }
 
 
+# ── 에이전트 협업 파이프라인 ──────────────────────────────────────────────────
+# route → 결과물을 자동으로 추가 전달할 채널 목록
+COLLAB_PIPELINE = {
+    # 유튜브 분석 → 훅 + 쇼츠 스크립트 자동 생성
+    "youtube-trends": ["hook-generator", "shorts-scripter"],
+    # 블로그 → 링크드인 포스팅 자동 생성
+    "blog-writer": ["linkedin-briefing"],
+    # 리서치 결과 → 쇼츠 스크립트 (research 파이프라인이 이미 처리하므로 제외)
+}
+
+def run_collab(route: str, original_request: str, result: str):
+    """메인 에이전트 결과를 협업 에이전트들에게 자동 전달."""
+    next_routes = COLLAB_PIPELINE.get(route, [])
+    for next_route in next_routes:
+        dest_id = CHANNEL_IDS.get(next_route, INBOX_ID)
+        system  = AGENT_SYSTEMS.get(next_route, AGENT_SYSTEMS["command-center"])
+        collab_input = f"[{route} 에이전트 결과를 바탕으로 작업]\n\n원본 요청: {original_request}\n\n참고 내용:\n{result}"
+        collab_result = call_claude(system, collab_input)
+        slack_post(dest_id, f"*[자동 협업 — {route} → {next_route}]*\n\n{collab_result}")
+        print(f"[협업] {route} → {next_route} 완료")
+
+
 # ── 메인 루프 ─────────────────────────────────────────────────────────────────
 
 def init_timestamps():
@@ -500,6 +522,9 @@ def main():
                 slack_post(dest_id, f"*[요청]* {text}\n\n*[응답]*\n{response}")
                 print(f"[{route}] 전송 완료")
                 speak(response)
+
+                # 협업 파이프라인 자동 실행
+                run_collab(route, text, response)
 
         except Exception as e:
             print(f"[오류] {e}", file=sys.stderr)
