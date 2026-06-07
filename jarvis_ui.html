@@ -7,483 +7,536 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000; width:100vw; height:100vh;
+  overflow:hidden; user-select:none;
+  font-family:'Share Tech Mono', monospace;
+  color:#00D4FF;
+}
+#root { width:100vw; height:100vh; display:flex; flex-direction:column; }
 
-  body {
-    background: #000;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    font-family: 'Orbitron', 'Courier New', monospace;
-    user-select: none;
-  }
+/* ── 스캔라인 ── */
+.scanlines {
+  position:fixed; inset:0; z-index:100; pointer-events:none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+    rgba(0,212,255,0.018) 2px, rgba(0,212,255,0.018) 4px);
+  animation: scan 10s linear infinite;
+}
+@keyframes scan {
+  from { background-position:0 0; }
+  to   { background-position:0 200px; }
+}
 
-  #root { width: 100vw; height: 100vh; }
+/* ── 레이아웃: 좌(orb) + 우(채팅) ── */
+.layout {
+  display:flex; width:100%; height:100%;
+  position:relative;
+}
 
-  /* ── 배경 스캔라인 ── */
-  .scanlines {
-    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 212, 255, 0.015) 2px,
-      rgba(0, 212, 255, 0.015) 4px
-    );
-    animation: scanMove 8s linear infinite;
-  }
-  @keyframes scanMove {
-    from { background-position: 0 0; }
-    to   { background-position: 0 100px; }
-  }
+/* ── 왼쪽: ORB 영역 ── */
+.orb-panel {
+  flex:0 0 50%; height:100%;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  position:relative;
+}
 
-  /* ── HUD 코너 브라켓 ── */
-  .corner {
-    position: fixed; width: 60px; height: 60px; z-index: 10;
-    opacity: 0.6;
-  }
-  .corner::before, .corner::after {
-    content: ''; position: absolute;
-    background: #00D4FF;
-  }
-  .corner::before { width: 2px; height: 100%; }
-  .corner::after  { width: 100%; height: 2px; }
-  .corner.tl { top: 24px; left: 24px; }
-  .corner.tl::before { top: 0; left: 0; }
-  .corner.tl::after  { top: 0; left: 0; }
-  .corner.tr { top: 24px; right: 24px; }
-  .corner.tr::before { top: 0; right: 0; }
-  .corner.tr::after  { top: 0; right: 0; }
-  .corner.bl { bottom: 24px; left: 24px; }
-  .corner.bl::before { bottom: 0; left: 0; }
-  .corner.bl::after  { bottom: 0; left: 0; }
-  .corner.br { bottom: 24px; right: 24px; }
-  .corner.br::before { bottom: 0; right: 0; }
-  .corner.br::after  { bottom: 0; right: 0; }
+/* 코너 */
+.corner { position:absolute; width:50px; height:50px; opacity:0.5; }
+.corner::before, .corner::after { content:''; position:absolute; background:#00D4FF; }
+.corner::before { width:2px; height:100%; }
+.corner::after  { width:100%; height:2px; }
+.corner.tl { top:20px; left:20px; }
+.corner.tl::before { top:0; left:0; }
+.corner.tl::after  { top:0; left:0; }
+.corner.tr { top:20px; right:20px; transform:scaleX(-1); }
+.corner.tr::before { top:0; left:0; }
+.corner.tr::after  { top:0; left:0; }
+.corner.bl { bottom:20px; left:20px; transform:scaleY(-1); }
+.corner.bl::before { top:0; left:0; }
+.corner.bl::after  { top:0; left:0; }
+.corner.br { bottom:20px; right:20px; transform:scale(-1); }
+.corner.br::before { top:0; left:0; }
+.corner.br::after  { top:0; left:0; }
 
-  /* ── 좌측 HUD 패널 ── */
-  .hud-left {
-    position: fixed; left: 32px; top: 50%;
-    transform: translateY(-50%);
-    z-index: 10; opacity: 0.5;
-    display: flex; flex-direction: column; gap: 16px;
-  }
-  .hud-item {
-    font-size: 9px; letter-spacing: 2px;
-    color: #00D4FF; line-height: 1.8;
-    border-left: 1px solid rgba(0,212,255,0.3);
-    padding-left: 10px;
-  }
-  .hud-item span { display: block; color: rgba(0,212,255,0.5); }
+.orb-title {
+  position:absolute; top:28px; left:50%; transform:translateX(-50%);
+  font-family:'Orbitron',monospace; font-size:12px; letter-spacing:10px;
+  color:rgba(0,212,255,0.6); font-weight:700;
+}
 
-  /* ── 우측 HUD 패널 ── */
-  .hud-right {
-    position: fixed; right: 32px; top: 50%;
-    transform: translateY(-50%);
-    z-index: 10; opacity: 0.5;
-    display: flex; flex-direction: column; gap: 16px;
-    align-items: flex-end;
-  }
-  .hud-item-r {
-    font-size: 9px; letter-spacing: 2px;
-    color: #00D4FF; line-height: 1.8;
-    border-right: 1px solid rgba(0,212,255,0.3);
-    padding-right: 10px; text-align: right;
-  }
-  .hud-item-r span { display: block; color: rgba(0,212,255,0.5); }
+canvas#orb { display:block; }
 
-  /* ── 하단 상태 텍스트 ── */
-  .status-bar {
-    position: fixed; bottom: 40px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 10; text-align: center;
-  }
-  .status-text {
-    font-size: 11px; letter-spacing: 6px;
-    color: #00D4FF; opacity: 0.7;
-  }
-  .status-dot {
-    display: inline-block; width: 6px; height: 6px;
-    border-radius: 50%; margin-right: 8px;
-    background: #00D4FF;
-    animation: dotPulse 1s ease-in-out infinite;
-  }
-  @keyframes dotPulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.2; }
-  }
+/* 상태 텍스트 */
+.orb-status {
+  position:absolute; bottom:60px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:8px;
+  font-size:10px; letter-spacing:5px; color:rgba(0,212,255,0.7);
+}
+.status-dot {
+  width:6px; height:6px; border-radius:50%; background:#00D4FF;
+  animation: blink 1.2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+.status-dot.active { background:#00FF88; animation:none; opacity:1; }
 
-  /* ── 캔버스 래퍼 ── */
-  .orb-wrapper {
-    position: fixed; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    z-index: 5;
-  }
+/* 브리핑 버튼 */
+.briefing-btn {
+  position:absolute; bottom:24px; left:50%; transform:translateX(-50%);
+  background:transparent; border:1px solid rgba(0,212,255,0.4);
+  color:#00D4FF; font-family:'Share Tech Mono',monospace;
+  font-size:9px; letter-spacing:3px; padding:6px 20px; cursor:pointer;
+  transition:all 0.2s;
+}
+.briefing-btn:hover {
+  background:rgba(0,212,255,0.1); border-color:#00D4FF;
+  box-shadow:0 0 12px rgba(0,212,255,0.3);
+}
 
-  /* ── 키 힌트 ── */
-  .key-hint {
-    position: fixed; bottom: 70px; left: 50%;
-    transform: translateX(-50%);
-    font-size: 8px; letter-spacing: 3px;
-    color: rgba(0,212,255,0.25); z-index: 10;
-  }
+/* ── 가운데 구분선 ── */
+.divider {
+  width:1px; background:linear-gradient(to bottom,
+    transparent, rgba(0,212,255,0.3) 20%, rgba(0,212,255,0.3) 80%, transparent);
+}
 
-  /* ── 상단 타이틀 ── */
-  .title {
-    position: fixed; top: 32px; left: 50%;
-    transform: translateX(-50%);
-    font-size: 13px; letter-spacing: 10px;
-    color: rgba(0,212,255,0.5); z-index: 10;
-    font-weight: 700;
-  }
+/* ── 오른쪽: 채팅 영역 ── */
+.chat-panel {
+  flex:1; height:100%;
+  display:flex; flex-direction:column;
+  padding:60px 24px 24px;
+  position:relative;
+}
+.chat-header {
+  position:absolute; top:24px; left:24px; right:24px;
+  font-family:'Orbitron',monospace; font-size:10px; letter-spacing:6px;
+  color:rgba(0,212,255,0.5); border-bottom:1px solid rgba(0,212,255,0.15);
+  padding-bottom:12px; display:flex; justify-content:space-between;
+}
+
+/* 채팅 메시지 목록 */
+.chat-messages {
+  flex:1; overflow-y:auto; display:flex; flex-direction:column;
+  gap:16px; padding-right:8px;
+}
+.chat-messages::-webkit-scrollbar { width:2px; }
+.chat-messages::-webkit-scrollbar-thumb { background:rgba(0,212,255,0.3); border-radius:2px; }
+
+.msg { display:flex; flex-direction:column; gap:4px; }
+.msg-label {
+  font-size:8px; letter-spacing:3px; opacity:0.45;
+}
+.msg-label.user  { color:#00FF88; align-self:flex-end; }
+.msg-label.jarvis{ color:#00D4FF; }
+.msg-bubble {
+  max-width:90%; padding:10px 14px;
+  font-size:12px; line-height:1.7; white-space:pre-wrap;
+}
+.msg-bubble.user {
+  align-self:flex-end;
+  background:rgba(0,255,136,0.06);
+  border:1px solid rgba(0,255,136,0.2);
+  border-radius:2px 2px 0 2px;
+  color:#00FF88;
+}
+.msg-bubble.jarvis {
+  align-self:flex-start;
+  background:rgba(0,212,255,0.06);
+  border:1px solid rgba(0,212,255,0.2);
+  border-radius:2px 2px 2px 0;
+  color:#00D4FF;
+}
+
+/* 스트리밍 커서 */
+.cursor {
+  display:inline-block; width:7px; height:13px;
+  background:#00D4FF; margin-left:3px;
+  animation:cursorBlink 0.7s step-end infinite;
+  vertical-align:middle;
+}
+@keyframes cursorBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* 웨이크워드 감지 배너 */
+.wake-banner {
+  padding:8px 14px; margin-bottom:8px;
+  background:rgba(0,212,255,0.08);
+  border:1px solid rgba(0,212,255,0.3);
+  font-size:10px; letter-spacing:3px; color:rgba(0,212,255,0.8);
+  border-radius:2px; animation:fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+/* 입력창 */
+.chat-input-area {
+  display:flex; gap:8px; margin-top:16px; align-items:center;
+  border-top:1px solid rgba(0,212,255,0.15); padding-top:12px;
+}
+.chat-input {
+  flex:1; background:rgba(0,212,255,0.04);
+  border:1px solid rgba(0,212,255,0.25);
+  color:#00D4FF; font-family:'Share Tech Mono',monospace;
+  font-size:12px; padding:8px 12px; outline:none;
+  letter-spacing:1px;
+}
+.chat-input:focus { border-color:rgba(0,212,255,0.6); background:rgba(0,212,255,0.08); }
+.chat-input::placeholder { color:rgba(0,212,255,0.25); }
+.send-btn {
+  background:transparent; border:1px solid rgba(0,212,255,0.4);
+  color:#00D4FF; font-family:'Share Tech Mono',monospace;
+  font-size:10px; letter-spacing:2px; padding:8px 14px; cursor:pointer;
+  transition:all 0.2s;
+}
+.send-btn:hover { background:rgba(0,212,255,0.1); border-color:#00D4FF; }
+
+/* HUD 데이터 (orb 하단) */
+.hud-stats {
+  position:absolute; left:20px; bottom:100px;
+  display:flex; flex-direction:column; gap:6px; opacity:0.4;
+}
+.hud-stat { font-size:8px; letter-spacing:2px; color:#00D4FF; }
+.hud-stat span { color:rgba(0,212,255,0.5); margin-right:6px; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-
-/* ── 유틸 ── */
 const TWO_PI = Math.PI * 2;
-const lerp = (a, b, t) => a + (b - a) * t;
+const lerp = (a,b,t) => a+(b-a)*t;
 
-/* ── 상수 ── */
-const C1 = '#00D4FF';
-const C2 = '#0066FF';
-const C3 = '#004499';
-
-/* ── 메인 컴포넌트 ── */
-function JarvisUI() {
-  const [mode, setMode] = useState('idle'); // idle | listening | speaking
+/* ══════════════════════════════════════════════
+   ORB 캔버스
+══════════════════════════════════════════════ */
+function OrbCanvas({ mode }) {
   const canvasRef = useRef(null);
-  const stateRef  = useRef({ mode: 'idle', t: 0, ripples: [], breathScale: 1 });
+  const sRef = useRef({ t:0, breathScale:1, ripples:[], mode:'idle' });
 
-  /* 키보드 단축키 */
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.code === 'Space')  { e.preventDefault(); setMode(m => m === 'listening' ? 'idle' : 'listening'); }
-      if (e.code === 'Enter')  { setMode(m => m === 'speaking'  ? 'idle' : 'speaking'); }
-      if (e.code === 'Escape') { setMode('idle'); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  useEffect(() => { sRef.current.mode = mode; }, [mode]);
 
-  /* mode 변경 시 stateRef 동기화 */
-  useEffect(() => {
-    stateRef.current.mode = mode;
-    if (mode === 'speaking') {
-      // 말할 때 리플 초기화
-      stateRef.current.ripples = [];
-    }
-  }, [mode]);
-
-  /* 애니메이션 루프 */
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    let animId;
-    let lastTime = 0;
+    let id, last=0;
 
     const resize = () => {
-      canvas.width  = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const size = Math.min(canvas.parentElement.offsetWidth, canvas.parentElement.offsetHeight) * 0.6;
+      canvas.width = canvas.height = size;
     };
     resize();
     window.addEventListener('resize', resize);
 
-    const draw = (ts) => {
-      const dt = (ts - lastTime) / 1000;
-      lastTime = ts;
-      const s = stateRef.current;
-      s.t += dt;
+    const frame = (ts) => {
+      const dt = Math.min((ts-last)/1000, 0.05); last=ts;
+      const s = sRef.current; s.t += dt;
+      const { width:W, height:H } = canvas;
+      const cx=W/2, cy=H/2;
+      const BASE = W * 0.38;
 
-      const cx = canvas.width  / 2;
-      const cy = canvas.height / 2;
-      const BASE_R = Math.min(canvas.width, canvas.height) * 0.18;
+      ctx.clearRect(0,0,W,H);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      /* 숨쉬기 */
+      let tb;
+      if      (s.mode==='idle')      tb = 1 + 0.03*Math.sin(s.t*0.7);
+      else if (s.mode==='listening') tb = 1 + 0.2*Math.abs(Math.sin(s.t*3.5));
+      else                           tb = 1 + 0.05*Math.sin(s.t*2);
+      s.breathScale = lerp(s.breathScale, tb, 0.08);
+      const R = BASE * s.breathScale;
 
-      /* ── 배경 방사형 그라디언트 ── */
-      const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, BASE_R * 3);
-      bgGrad.addColorStop(0,   'rgba(0,40,80,0.15)');
-      bgGrad.addColorStop(0.4, 'rgba(0,20,50,0.08)');
-      bgGrad.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const { mode } = s;
-
-      /* ── 숨쉬기 스케일 계산 ── */
-      let targetBreath;
-      if      (mode === 'idle')      targetBreath = 1 + 0.035 * Math.sin(s.t * 0.7);
-      else if (mode === 'listening') targetBreath = 1 + 0.18  * Math.abs(Math.sin(s.t * 3.5));
-      else                           targetBreath = 1 + 0.05  * Math.sin(s.t * 1.5);
-      s.breathScale = lerp(s.breathScale, targetBreath, 0.08);
-      const R = BASE_R * s.breathScale;
-
-      /* ── 리플 (speaking) ── */
-      if (mode === 'speaking') {
-        if (s.t % 0.45 < dt + 0.01) {
-          s.ripples.push({ r: R, alpha: 0.8, speed: BASE_R * 0.9 });
-        }
+      /* 리플 */
+      if (s.mode==='speaking') {
+        if (s.t % 0.5 < dt+0.01) s.ripples.push({r:R, a:0.7, sp:BASE*0.85});
       }
-      s.ripples = s.ripples.filter(rp => rp.alpha > 0.01);
-      s.ripples.forEach(rp => {
-        rp.r     += rp.speed * dt;
-        rp.alpha *= 0.96;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rp.r, 0, TWO_PI);
-        ctx.strokeStyle = `rgba(0,212,255,${rp.alpha * 0.5})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+      if (s.mode!=='speaking') s.ripples=[];
+      s.ripples = s.ripples.filter(r=>r.a>0.01);
+      s.ripples.forEach(rp=>{
+        rp.r+=rp.sp*dt; rp.a*=0.965;
+        ctx.beginPath(); ctx.arc(cx,cy,rp.r,0,TWO_PI);
+        ctx.strokeStyle=`rgba(0,212,255,${rp.a*0.45})`; ctx.lineWidth=1.5; ctx.stroke();
       });
 
-      /* ── 외부 링 3 (느린 회전, 틱 마크) ── */
-      drawTickRing(ctx, cx, cy, R * 2.8, s.t * 0.12, 72, mode);
+      drawTickRing(ctx,cx,cy,R*2.6, s.t*0.1, 60, s.mode);
+      drawArcRing (ctx,cx,cy,R*2.0,-s.t*0.22, 6, s.mode);
+      drawArcRing (ctx,cx,cy,R*1.55, s.t*0.5,  3, s.mode);
 
-      /* ── 외부 링 2 (호 세그먼트) ── */
-      drawArcRing(ctx, cx, cy, R * 2.2, -s.t * 0.25, 6, mode);
+      /* 외부 글로우 */
+      const gA = s.mode==='idle'?0.1:s.mode==='listening'?0.28:0.18;
+      const bg = ctx.createRadialGradient(cx,cy,R*0.6,cx,cy,R*1.6);
+      bg.addColorStop(0,`rgba(0,150,255,${gA})`); bg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(cx,cy,R*1.6,0,TWO_PI); ctx.fill();
 
-      /* ── 외부 링 1 (빠른 회전 호) ── */
-      drawArcRing(ctx, cx, cy, R * 1.65, s.t * 0.55, 3, mode);
+      drawOrb(ctx,cx,cy,R,s.t,s.mode);
+      if(s.mode==='listening') drawParticles(ctx,cx,cy,R,s.t);
 
-      /* ── 외부 글로우 ── */
-      const outerGlow = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 1.5);
-      const glowAlpha = mode === 'idle' ? 0.12 : mode === 'listening' ? 0.3 : 0.2;
-      outerGlow.addColorStop(0, `rgba(0,212,255,${glowAlpha})`);
-      outerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = outerGlow;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * 1.5, 0, TWO_PI);
-      ctx.fill();
-
-      /* ── 메인 orb ── */
-      drawOrb(ctx, cx, cy, R, s.t, mode);
-
-      /* ── listening 파티클 ── */
-      if (mode === 'listening') {
-        drawParticles(ctx, cx, cy, R, s.t);
-      }
-
-      animId = requestAnimationFrame(draw);
+      id=requestAnimationFrame(frame);
     };
+    id=requestAnimationFrame(frame);
+    return ()=>{ cancelAnimationFrame(id); window.removeEventListener('resize',resize); };
+  },[]);
 
-    animId = requestAnimationFrame(draw);
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener('resize', resize);
-    };
-  }, []);
+  return <canvas id="orb" ref={canvasRef}/>;
+}
 
-  const statusMap = { idle: 'STANDBY', listening: 'LISTENING', speaking: 'PROCESSING' };
+function drawOrb(ctx,cx,cy,R,t,mode){
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,TWO_PI);
+  ctx.strokeStyle=mode==='idle'?'rgba(0,212,255,0.6)':'rgba(0,212,255,1)';
+  ctx.lineWidth=mode==='listening'?2.5:1.5; ctx.stroke();
+
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
+  if(mode==='idle'){
+    g.addColorStop(0,'rgba(0,60,160,0.55)'); g.addColorStop(1,'rgba(0,10,40,0.1)');
+  } else if(mode==='listening'){
+    g.addColorStop(0,'rgba(0,180,255,0.7)'); g.addColorStop(1,'rgba(0,30,80,0.15)');
+  } else {
+    g.addColorStop(0,'rgba(0,100,220,0.65)'); g.addColorStop(1,'rgba(0,15,60,0.1)');
+  }
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R,0,TWO_PI); ctx.fill();
+
+  drawHexPattern(ctx,cx,cy,R*0.52,t*0.07,mode);
+
+  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.28);
+  cg.addColorStop(0,'rgba(210,245,255,0.9)'); cg.addColorStop(1,'rgba(0,150,255,0)');
+  ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,R*0.28,0,TWO_PI); ctx.fill();
+}
+
+function drawHexPattern(ctx,cx,cy,R,angle,mode){
+  const a=mode==='idle'?0.12:0.28;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
+  ctx.strokeStyle=`rgba(0,212,255,${a})`; ctx.lineWidth=0.5;
+  for(let i=0;i<6;i++){
+    const ang=(i/6)*TWO_PI;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(ang)*R*0.28,Math.sin(ang)*R*0.28);
+    ctx.lineTo(Math.cos(ang)*R,Math.sin(ang)*R); ctx.stroke();
+  }
+  ctx.beginPath();
+  for(let i=0;i<6;i++){
+    const ang=(i/6)*TWO_PI-Math.PI/6;
+    i===0?ctx.moveTo(Math.cos(ang)*R,Math.sin(ang)*R):ctx.lineTo(Math.cos(ang)*R,Math.sin(ang)*R);
+  }
+  ctx.closePath(); ctx.strokeStyle=`rgba(0,212,255,${a*1.8})`; ctx.lineWidth=1; ctx.stroke();
+  ctx.restore();
+}
+
+function drawArcRing(ctx,cx,cy,R,angle,segs,mode){
+  const a=mode==='idle'?0.3:0.65; const gap=0.15;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
+  for(let i=0;i<segs;i++){
+    const s=(i/segs)*TWO_PI+gap, e=((i+1)/segs)*TWO_PI-gap;
+    ctx.beginPath(); ctx.arc(0,0,R,s,e);
+    ctx.strokeStyle=`rgba(0,212,255,${a})`; ctx.lineWidth=1.5; ctx.stroke();
+    const da=e;
+    ctx.beginPath(); ctx.arc(Math.cos(da)*R,Math.sin(da)*R,2,0,TWO_PI);
+    ctx.fillStyle=`rgba(0,212,255,${a*1.5})`; ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTickRing(ctx,cx,cy,R,angle,ticks,mode){
+  const a=mode==='idle'?0.18:0.4;
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
+  for(let i=0;i<ticks;i++){
+    const ang=(i/ticks)*TWO_PI, maj=i%10===0;
+    const len=maj?10:4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(ang)*R,Math.sin(ang)*R);
+    ctx.lineTo(Math.cos(ang)*(R-len),Math.sin(ang)*(R-len));
+    ctx.strokeStyle=`rgba(0,212,255,${maj?a*2:a})`; ctx.lineWidth=maj?1.5:0.5; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawParticles(ctx,cx,cy,R,t){
+  for(let i=0;i<12;i++){
+    const a=(i/12)*TWO_PI+t*0.8;
+    const d=R*1.08+Math.sin(t*3+i)*R*0.22;
+    const alpha=0.3+0.4*Math.abs(Math.sin(t*2+i*0.7));
+    const sz=1.5+1.5*Math.abs(Math.sin(t*2.5+i));
+    ctx.beginPath();
+    ctx.arc(cx+Math.cos(a)*d, cy+Math.sin(a)*d, sz, 0, TWO_PI);
+    ctx.fillStyle=`rgba(0,212,255,${alpha})`; ctx.fill();
+  }
+}
+
+/* ══════════════════════════════════════════════
+   메인 앱
+══════════════════════════════════════════════ */
+function App() {
+  const [mode, setMode]       = useState('idle');
+  const [msgs, setMsgs]       = useState([]);
+  const [streaming, setStream] = useState('');
+  const [wakeBanner, setWake] = useState('');
+  const [input, setInput]     = useState('');
+  const [stocks, setStocks]   = useState([]);
+  const [time, setTime]       = useState('');
+  const socketRef  = useRef(null);
+  const messagesRef = useRef(null);
+  const streamRef  = useRef('');
+
+  /* 시계 */
+  useEffect(()=>{
+    const tick=()=>setTime(new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    tick(); const id=setInterval(tick,1000); return()=>clearInterval(id);
+  },[]);
+
+  /* 자동 스크롤 */
+  useEffect(()=>{
+    if(messagesRef.current) messagesRef.current.scrollTop=messagesRef.current.scrollHeight;
+  },[msgs,streaming]);
+
+  /* Socket.IO 연결 */
+  useEffect(()=>{
+    const sock=io('http://localhost:5001');
+    socketRef.current=sock;
+
+    sock.on('state', d=>{
+      setMode(d.status==='idle'?'idle':d.status==='listening'?'listening':'speaking');
+    });
+
+    sock.on('wake', d=>{
+      setWake(`웨이크워드 감지: "${d.heard}"`);
+      setMode('listening');
+      setTimeout(()=>setWake(''), 3000);
+    });
+
+    sock.on('chat_user', text=>{
+      setMsgs(m=>[...m,{role:'user',text}]);
+      setMode('listening');
+    });
+
+    sock.on('text_chunk', chunk=>{
+      setMode('speaking');
+      streamRef.current += chunk;
+      setStream(streamRef.current);
+    });
+
+    sock.on('text_done', full=>{
+      setMsgs(m=>[...m,{role:'jarvis',text:full}]);
+      streamRef.current=''; setStream('');
+      setMode('idle');
+    });
+
+    sock.on('data', d=>{
+      if(d.stocks) setStocks(d.stocks.slice(0,3));
+    });
+
+    sock.on('speak_now', text=>{
+      setMsgs(m=>[...m,{role:'jarvis',text}]);
+    });
+
+    sock.on('error', e=>{
+      setMsgs(m=>[...m,{role:'jarvis',text:`⚠ ${e}`}]);
+      setMode('idle');
+    });
+
+    return()=>sock.disconnect();
+  },[]);
+
+  /* 메시지 전송 */
+  const send = useCallback(()=>{
+    const txt=input.trim(); if(!txt) return;
+    socketRef.current?.emit('user_message',{text:txt});
+    setMsgs(m=>[...m,{role:'user',text:txt}]);
+    setInput(''); setMode('listening');
+  },[input]);
+
+  const onKey = (e)=>{ if(e.key==='Enter') send(); };
+
+  /* 브리핑 */
+  const triggerBriefing = ()=>{
+    socketRef.current?.emit('trigger');
+    setMsgs(m=>[...m,{role:'user',text:'브리핑 시작'}]);
+    setMode('listening');
+  };
+
+  const statusLabel = { idle:'STANDBY', listening:'LISTENING', speaking:'PROCESSING' };
 
   return (
-    <>
-      <div className="scanlines" />
+    <div className="layout">
+      <div className="scanlines"/>
 
-      {/* 코너 브라켓 */}
-      <div className="corner tl" />
-      <div className="corner tr" />
-      <div className="corner bl" />
-      <div className="corner br" />
+      {/* ── 왼쪽: ORB ── */}
+      <div className="orb-panel">
+        <div className="corner tl"/><div className="corner tr"/>
+        <div className="corner bl"/><div className="corner br"/>
+        <div className="orb-title">J . A . R . V . I . S</div>
 
-      {/* 상단 타이틀 */}
-      <div className="title">J . A . R . V . I . S</div>
+        <OrbCanvas mode={mode}/>
 
-      {/* 좌측 HUD */}
-      <div className="hud-left">
-        <div className="hud-item"><span>SYSTEM</span>ONLINE</div>
-        <div className="hud-item"><span>NEURAL</span>ACTIVE</div>
-        <div className="hud-item"><span>UPLINK</span>SECURE</div>
-        <div className="hud-item"><span>CORE TEMP</span>36.2°C</div>
+        {/* HUD 스탯 */}
+        <div className="hud-stats">
+          {stocks.map((s,i)=>(
+            <div key={i} className="hud-stat">
+              <span>{s.symbol}</span>{s.price} <span style={{color:s.change>=0?'#00FF88':'#FF4466'}}>{s.change>=0?'+':''}{s.change?.toFixed?.(2)}%</span>
+            </div>
+          ))}
+          {stocks.length===0 && <div className="hud-stat"><span>SYSTEM</span>ONLINE</div>}
+        </div>
+
+        <div className="orb-status">
+          <div className={`status-dot${mode!=='idle'?' active':''}`}/>
+          {statusLabel[mode]}
+        </div>
+        <button className="briefing-btn" onClick={triggerBriefing}>
+          ▶ MORNING BRIEFING
+        </button>
       </div>
 
-      {/* 우측 HUD */}
-      <div className="hud-right">
-        <div className="hud-item-r"><span>VERSION</span>MK.VII</div>
-        <div className="hud-item-r"><span>POWER</span>100%</div>
-        <div className="hud-item-r"><span>AGENTS</span>16 ACTIVE</div>
-        <div className="hud-item-r"><span>MODE</span>{statusMap[mode]}</div>
-      </div>
+      {/* ── 구분선 ── */}
+      <div className="divider"/>
 
-      {/* 캔버스 */}
-      <div className="orb-wrapper">
-        <canvas ref={canvasRef} style={{ display:'block' }} />
-      </div>
+      {/* ── 오른쪽: 채팅 ── */}
+      <div className="chat-panel">
+        <div className="chat-header">
+          <span>COMMUNICATION LOG</span>
+          <span style={{opacity:0.6}}>{time}</span>
+        </div>
 
-      {/* 하단 상태 */}
-      <div className="status-bar">
-        <div className="key-hint">SPACE · LISTEN &nbsp;&nbsp; ENTER · SPEAK &nbsp;&nbsp; ESC · IDLE</div>
-        <div className="status-text">
-          <span className="status-dot" />
-          {statusMap[mode]}
+        <div className="chat-messages" ref={messagesRef}>
+          {msgs.length===0 && (
+            <div style={{opacity:0.25, fontSize:11, letterSpacing:2, marginTop:32, textAlign:'center'}}>
+              "자비스" 라고 말하거나 아래에 입력하세요
+            </div>
+          )}
+
+          {wakeBanner && <div className="wake-banner">⬡ {wakeBanner}</div>}
+
+          {msgs.map((m,i)=>(
+            <div key={i} className="msg">
+              <div className={`msg-label ${m.role}`}>{m.role==='user'?'YOU':'JARVIS'}</div>
+              <div className={`msg-bubble ${m.role}`}>{m.text}</div>
+            </div>
+          ))}
+
+          {streaming && (
+            <div className="msg">
+              <div className="msg-label jarvis">JARVIS</div>
+              <div className="msg-bubble jarvis">
+                {streaming}<span className="cursor"/>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="chat-input-area">
+          <input
+            className="chat-input"
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="명령을 입력하세요..."
+          />
+          <button className="send-btn" onClick={send}>SEND</button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
-/* ── 메인 Orb 그리기 ── */
-function drawOrb(ctx, cx, cy, R, t, mode) {
-  // 외부 테두리 광선
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, TWO_PI);
-  const borderAlpha = mode === 'idle' ? 0.6 : 1;
-  ctx.strokeStyle = `rgba(0,212,255,${borderAlpha})`;
-  ctx.lineWidth = mode === 'listening' ? 2.5 : 1.5;
-  ctx.stroke();
-
-  // 내부 그라디언트
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-  if (mode === 'idle') {
-    grad.addColorStop(0,   'rgba(0,80,180,0.5)');
-    grad.addColorStop(0.5, 'rgba(0,50,120,0.3)');
-    grad.addColorStop(1,   'rgba(0,20,60,0.1)');
-  } else if (mode === 'listening') {
-    grad.addColorStop(0,   'rgba(0,180,255,0.7)');
-    grad.addColorStop(0.4, 'rgba(0,100,200,0.5)');
-    grad.addColorStop(1,   'rgba(0,30,80,0.2)');
-  } else {
-    grad.addColorStop(0,   'rgba(0,120,255,0.6)');
-    grad.addColorStop(0.5, 'rgba(0,70,160,0.4)');
-    grad.addColorStop(1,   'rgba(0,20,60,0.1)');
-  }
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, TWO_PI);
-  ctx.fill();
-
-  // 내부 헥사곤 패턴
-  drawHexPattern(ctx, cx, cy, R * 0.55, t * 0.08, mode);
-
-  // 중앙 빛점
-  const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.3);
-  coreGrad.addColorStop(0,   'rgba(200,240,255,0.9)');
-  coreGrad.addColorStop(0.3, 'rgba(0,212,255,0.5)');
-  coreGrad.addColorStop(1,   'rgba(0,100,200,0)');
-  ctx.fillStyle = coreGrad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R * 0.3, 0, TWO_PI);
-  ctx.fill();
-}
-
-/* ── 헥사곤 내부 패턴 ── */
-function drawHexPattern(ctx, cx, cy, R, angle, mode) {
-  const alpha = mode === 'idle' ? 0.15 : 0.3;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.strokeStyle = `rgba(0,212,255,${alpha})`;
-  ctx.lineWidth = 0.5;
-
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * TWO_PI;
-    const x1 = Math.cos(a) * R * 0.3;
-    const y1 = Math.sin(a) * R * 0.3;
-    const x2 = Math.cos(a) * R;
-    const y2 = Math.sin(a) * R;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
-
-  // 헥사곤 테두리
-  ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * TWO_PI - Math.PI / 6;
-    const x = Math.cos(a) * R;
-    const y = Math.sin(a) * R;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.strokeStyle = `rgba(0,212,255,${alpha * 1.5})`;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-/* ── 호 세그먼트 링 ── */
-function drawArcRing(ctx, cx, cy, R, angle, segments, mode) {
-  const gap = 0.15;
-  const alpha = mode === 'idle' ? 0.35 : 0.7;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  for (let i = 0; i < segments; i++) {
-    const start = (i / segments) * TWO_PI + gap;
-    const end   = ((i + 1) / segments) * TWO_PI - gap;
-
-    ctx.beginPath();
-    ctx.arc(0, 0, R, start, end);
-    ctx.strokeStyle = `rgba(0,212,255,${alpha})`;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 세그먼트 끝에 작은 점
-    const dotA = end;
-    ctx.beginPath();
-    ctx.arc(Math.cos(dotA) * R, Math.sin(dotA) * R, 2.5, 0, TWO_PI);
-    ctx.fillStyle = `rgba(0,212,255,${alpha * 1.5})`;
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-/* ── 틱 마크 링 ── */
-function drawTickRing(ctx, cx, cy, R, angle, ticks, mode) {
-  const alpha = mode === 'idle' ? 0.2 : 0.45;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  for (let i = 0; i < ticks; i++) {
-    const a = (i / ticks) * TWO_PI;
-    const isMajor = i % 9 === 0;
-    const len = isMajor ? 12 : 5;
-    const x1 = Math.cos(a) * R;
-    const y1 = Math.sin(a) * R;
-    const x2 = Math.cos(a) * (R - len);
-    const y2 = Math.sin(a) * (R - len);
-
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = `rgba(0,212,255,${isMajor ? alpha * 2 : alpha})`;
-    ctx.lineWidth = isMajor ? 1.5 : 0.5;
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/* ── listening 파티클 ── */
-function drawParticles(ctx, cx, cy, R, t) {
-  const count = 12;
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * TWO_PI + t * 0.8;
-    const dist = R * 1.1 + Math.sin(t * 3 + i) * R * 0.25;
-    const x = cx + Math.cos(a) * dist;
-    const y = cy + Math.sin(a) * dist;
-    const alpha = 0.4 + 0.4 * Math.abs(Math.sin(t * 2 + i * 0.7));
-    const size  = 1.5 + 1.5 * Math.abs(Math.sin(t * 2.5 + i));
-
-    ctx.beginPath();
-    ctx.arc(x, y, size, 0, TWO_PI);
-    ctx.fillStyle = `rgba(0,212,255,${alpha})`;
-    ctx.fill();
-  }
-}
-
-/* ── React DOM 렌더 ── */
-ReactDOM.createRoot(document.getElementById('root')).render(<JarvisUI />);
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
