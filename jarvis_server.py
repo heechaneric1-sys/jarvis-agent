@@ -513,9 +513,50 @@ def on_user_message(data):
     threading.Thread(target=run_chat, args=(text,), daemon=True).start()
 
 
+def web_search(query: str) -> str:
+    """DuckDuckGo Instant Answer + 상위 결과 텍스트."""
+    try:
+        r = _requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
+            timeout=6,
+        )
+        d = r.json()
+        parts = []
+        if d.get("Abstract"):
+            parts.append(d["Abstract"])
+        for t in d.get("RelatedTopics", [])[:4]:
+            if isinstance(t, dict) and t.get("Text"):
+                parts.append(t["Text"][:200])
+        return "\n".join(parts) if parts else ""
+    except Exception:
+        return ""
+
+
+def youtube_search(query: str) -> str:
+    """YouTube 인기 영상 검색."""
+    if not YOUTUBE_API_KEY:
+        return ""
+    try:
+        r = _requests.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={"part":"snippet","q":query,"type":"video","order":"viewCount",
+                    "maxResults":3,"key":YOUTUBE_API_KEY,"relevanceLanguage":"ko"},
+            timeout=6,
+        )
+        items = r.json().get("items", [])
+        lines = []
+        for item in items:
+            s = item["snippet"]
+            vid = item["id"]["videoId"]
+            lines.append(f"{s['title']} ({s['channelTitle']}) https://youtu.be/{vid}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def run_chat(user_text: str):
     global _chat_proc
-    # 이전 대화 즉시 중단
     if _chat_proc and _chat_proc.poll() is None:
         _chat_proc.kill()
         _chat_proc = None
@@ -523,46 +564,51 @@ def run_chat(user_text: str):
     set_state("speaking")
     socketio.emit("chat_user", user_text)
 
-    # 마지막 브리핑 데이터를 컨텍스트로 포함
+    # ── 실시간 웹 검색 ──
+    import concurrent.futures as _cf
+    with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+        f_web = ex.submit(web_search, user_text)
+        f_yt  = ex.submit(youtube_search, user_text)
+        web_result = f_web.result()
+        yt_result  = f_yt.result()
+
+    # ── 컨텍스트 조합 ──
     ctx = ""
     if _last_data.get("stocks"):
         lines = "\n".join(
             f"{s['symbol']}: {s['price']:,.2f} ({'+' if s['change']>=0 else ''}{s['change']:.2f}%)"
             for s in _last_data["stocks"]
         )
-        ctx += f"\n[오늘 주식 데이터]\n{lines}"
+        ctx += f"\n[주식]\n{lines}"
     if _last_data.get("trends"):
-        ctx += f"\n[트렌드]\n" + "\n".join(t['keyword'] for t in _last_data["trends"])
-    if _last_data.get("news"):
-        ctx += f"\n[뉴스]\n" + "\n".join(_last_data["news"][:3])
+        ctx += "\n[트렌드]\n" + "\n".join(t['keyword'] for t in _last_data["trends"])
+    if web_result:
+        ctx += f"\n[웹 검색 결과]\n{web_result}"
+    if yt_result:
+        ctx += f"\n[YouTube 관련 영상]\n{yt_result}"
 
     prompt = f"""너는 JARVIS다. 아이언맨 토니 스타크의 AI 비서. 사용자를 항상 "스타크씨"라고 불러. 한국어로 답한다.
-웹 검색 도구를 적극 사용해서 실시간으로 최신 정보를 직접 찾아서 답해라.
+아래 실시간 검색 데이터를 바탕으로 정확하게 답해라.
 규칙:
-- 2~3문장 이내로 짧고 정확하게
-- 이모지, 마크다운, 특수문자 없이 순수 텍스트
-- "검색 불가", "접근 불가", "기능 없음" 절대 금지
-- 모르는 것도 웹 검색으로 확인 후 답해
+- 2~3문장 이내로 짧고 명확하게
+- 이모지, 마크다운, 특수문자 없이 순수 텍스트만
+- 검색 데이터가 있으면 반드시 활용해서 구체적으로 답해
 {ctx}
 
-사용자: {user_text}"""
+사용자 질문: {user_text}"""
 
     try:
-        CLAUDE_BIN = (
-            Path.home()
-            / "Library/Application Support/Claude/claude-code/2.1.156/claude.app/Contents/MacOS/claude"
-        )
-        import os as _env_os
-        env = {k:v for k,v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        _chat_proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "-p", prompt],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
-        )
+        import anthropic as _anthropic
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         full = ""
-        for chunk in iter(lambda: _chat_proc.stdout.read(8), ""):
-            full += chunk
-            socketio.emit("text_chunk", chunk)
-        _chat_proc.wait()
+        with client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            for chunk in stream.text_stream:
+                full += chunk
+                socketio.emit("text_chunk", chunk)
         full = full.strip()
         socketio.emit("text_done", full)
         threading.Thread(target=speak_server, args=(full,), daemon=True).start()

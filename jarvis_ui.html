@@ -384,7 +384,7 @@ socket.on('wake',       d=>{
   setMode('listening');
   setTimeout(()=>{ltxt.style.color='rgba(0,212,255,.4)';},3000);
 });
-socket.on('chat_user',  t=>{addMsg('you',t);setMode('listening');});
+socket.on('chat_user',  t=>{setMode('listening');});  // 프론트에서 이미 추가함
 socket.on('speak_now',  t=>{addMsg('j',t);});
 socket.on('text_chunk', c=>{setMode('speaking');appendStream(c);});
 socket.on('text_done',  f=>{endStream();if(f)addMsg('j',f);setMode('idle');});
