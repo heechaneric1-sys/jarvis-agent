@@ -598,17 +598,21 @@ def run_chat(user_text: str):
 사용자 질문: {user_text}"""
 
     try:
-        import anthropic as _anthropic
-        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        CLAUDE_BIN = (
+            Path.home()
+            / "Library/Application Support/Claude/claude-code/2.1.156/claude.app/Contents/MacOS/claude"
+        )
+        import os as _env_os
+        env = {k: v for k, v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        _chat_proc = subprocess.Popen(
+            [str(CLAUDE_BIN), "-p", prompt],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        )
         full = ""
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                full += chunk
-                socketio.emit("text_chunk", chunk)
+        for chunk in iter(lambda: _chat_proc.stdout.read(8), ""):
+            full += chunk
+            socketio.emit("text_chunk", chunk)
+        _chat_proc.wait()
         full = full.strip()
         socketio.emit("text_done", full)
         threading.Thread(target=speak_server, args=(full,), daemon=True).start()
