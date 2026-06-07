@@ -378,7 +378,7 @@ def run_briefing():
         import os as _env_os
         env = {k:v for k,v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "-p", prompt],
+            [str(CLAUDE_BIN), "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         full = ""
@@ -619,7 +619,7 @@ User: {user_text}"""
         import os as _env_os
         env = {k: v for k, v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         _chat_proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "-p", prompt],
+            [str(CLAUDE_BIN), "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         full = ""

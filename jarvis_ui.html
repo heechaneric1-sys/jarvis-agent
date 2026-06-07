@@ -188,7 +188,7 @@ const orbGroup = new THREE.Group();
 scene.add(orbGroup);
 
 /* ── 파티클 클라우드 (구체 형태, AdditiveBlending으로 글로우) ── */
-const TOTAL = 6000;
+const TOTAL = 2000;
 const pos   = new Float32Array(TOTAL * 3);
 const sizes = new Float32Array(TOTAL);
 
@@ -221,7 +221,7 @@ const cloudPoints = new THREE.Points(cloudGeo, cloudMat);
 orbGroup.add(cloudPoints);
 
 /* 중간층 — 조금 더 밝은 파티클 */
-const MID = 1500;
+const MID = 500;
 const posM = new Float32Array(MID * 3);
 for(let i = 0; i < MID; i++){
   const r   = 0.6 + Math.random() * 0.85;
@@ -244,7 +244,7 @@ const midMat = new THREE.PointsMaterial({
 orbGroup.add(new THREE.Points(midGeo, midMat));
 
 /* 코어 — 밝은 중심 */
-const CORE = 400;
+const CORE = 150;
 const posC = new Float32Array(CORE * 3);
 for(let i = 0; i < CORE; i++){
   const r   = Math.random() * 0.4;
