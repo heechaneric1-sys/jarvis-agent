@@ -413,7 +413,7 @@ const ltxt=document.getElementById('ltxt');
 
 if(SR){
   const rec=new SR();
-  rec.lang=''; rec.continuous=true; rec.interimResults=true;  // 언어 자동 감지
+  rec.lang='ko-KR'; rec.continuous=true; rec.interimResults=true;
   rec.onstart=()=>{ldot.className='on';ltxt.textContent='듣고 있습니다...';ltxt.style.color='rgba(0,212,255,.5)';};
   rec.onend=()=>{ldot.className='';ltxt.textContent='마이크 대기...';setTimeout(()=>{try{rec.start();}catch(e){}},400);};
   rec.onresult=(e)=>{
