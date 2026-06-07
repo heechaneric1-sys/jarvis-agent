@@ -1,0 +1,8 @@
+.env*
+*.env
+*.log
+*.mp3
+*.aiff
+__pycache__/
+*.pyc
+.DS_Store
