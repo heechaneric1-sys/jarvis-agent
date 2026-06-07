@@ -310,7 +310,7 @@ renderer.setAnimationLoop(()=>{
   orbGroup.rotation.y += dt * rotSpeed;
   orbGroup.rotation.x  = Math.sin(breathT*0.15)*0.08;
 
-  nodeGroup.rotation.y -= dt * 0.04;
+  cloudPoints.rotation.y -= dt * 0.03;
 
   // 코어 펄스
   const coreAlpha = 0.85 + 0.15*Math.abs(Math.sin(breathT*1.5));
