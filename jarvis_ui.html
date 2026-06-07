@@ -190,13 +190,13 @@ scene.add(orbGroup);
 /* 외부 반투명 구체 */
 const outerGeo = new THREE.SphereGeometry(1.6, 32, 32);
 const outerMat = new THREE.MeshBasicMaterial({
-  color:0x0033aa, transparent:true, opacity:0.08, wireframe:false, side:THREE.FrontSide
+  color:0x00aaff, transparent:true, opacity:0.04, wireframe:false, side:THREE.FrontSide
 });
 orbGroup.add(new THREE.Mesh(outerGeo, outerMat));
 
 /* 와이어프레임 구체 */
 const wireGeo = new THREE.SphereGeometry(1.55, 18, 18);
-const wireMat = new THREE.MeshBasicMaterial({color:0x004488, wireframe:true, transparent:true, opacity:0.12});
+const wireMat = new THREE.MeshBasicMaterial({color:0x0066cc, wireframe:true, transparent:true, opacity:0.06});
 orbGroup.add(new THREE.Mesh(wireGeo, wireMat));
 
 /* ── 노드 & 연결선 ── */
@@ -216,9 +216,10 @@ for(let i=0; i<NODE_COUNT; i++){
   const y = r*Math.sin(phi)*Math.sin(theta);
   const z = r*Math.cos(phi);
   nodePositions.push(new THREE.Vector3(x,y,z));
-  nodeSizes.push(Math.random()>0.85 ? 0.035 : 0.018);
-  // 70% cyan, 30% orange
-  nodeColors.push(Math.random()>0.3 ? 0x00D4FF : 0xFF6B2B);
+  nodeSizes.push(Math.random()>0.85 ? 0.032 : 0.015);
+  // 전부 파랑/청록 계열
+  const blues = [0x00D4FF, 0x0088FF, 0x44EEFF, 0x0055CC];
+  nodeColors.push(blues[Math.floor(Math.random()*blues.length)]);
 }
 
 // 노드 메시들
@@ -247,13 +248,13 @@ orbGroup.add(new THREE.LineSegments(lineGeo, lineMat));
 
 /* ── 내부 코어 구체 ── */
 const coreGeo = new THREE.SphereGeometry(0.45,32,32);
-const coreMat = new THREE.MeshBasicMaterial({color:0x44ccff, transparent:true, opacity:0.7});
+const coreMat = new THREE.MeshBasicMaterial({color:0x88eeff, transparent:true, opacity:0.45});
 const coreMesh = new THREE.Mesh(coreGeo, coreMat);
 orbGroup.add(coreMesh);
 
 // 코어 내부 밝은 점
-const innerGeo = new THREE.SphereGeometry(0.2,16,16);
-const innerMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.85});
+const innerGeo = new THREE.SphereGeometry(0.22,16,16);
+const innerMat = new THREE.MeshBasicMaterial({color:0xeefcff, transparent:true, opacity:0.95});
 orbGroup.add(new THREE.Mesh(innerGeo,innerMat));
 
 /* ── 궤도 링 ── */
@@ -387,7 +388,7 @@ socket.on('wake',       d=>{
 socket.on('chat_user',  t=>{setMode('listening');});  // 프론트에서 이미 추가함
 socket.on('speak_now',  t=>{addMsg('j',t);});
 socket.on('text_chunk', c=>{setMode('speaking');appendStream(c);});
-socket.on('text_done',  f=>{endStream();if(f)addMsg('j',f);setMode('idle');});
+socket.on('text_done',  f=>{endStream();setMode('idle');});  // 스트림 버블 이미 있음
 socket.on('data',       d=>{if(d.stocks)renderStocks(d.stocks);});
 socket.on('error',      e=>{addMsg('j',`⚠ ${e}`);setMode('idle');});
 
