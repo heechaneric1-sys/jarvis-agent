@@ -316,8 +316,18 @@ def build_briefing_prompt(data: dict) -> str:
 - 마지막은 "브리핑 종료입니다"로"""
 
 
+_afplay_proc = None   # 현재 재생 중인 afplay 프로세스
+
+def stop_speaking():
+    """재생 중인 afplay 즉시 중단."""
+    global _afplay_proc
+    if _afplay_proc and _afplay_proc.poll() is None:
+        _afplay_proc.kill()
+        _afplay_proc = None
+
 def speak_server(text: str):
     """ElevenLabs TTS → afplay (서버에서 직접 재생)."""
+    global _afplay_proc
     if not text or not ELEVENLABS_API_KEY:
         return
     import requests as _req, tempfile, os as _os
@@ -336,7 +346,8 @@ def speak_server(text: str):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(r.content)
             tmp = f.name
-        subprocess.run(["afplay", tmp])
+        _afplay_proc = subprocess.Popen(["afplay", tmp])
+        _afplay_proc.wait()
         _os.unlink(tmp)
     except Exception as e:
         print(f"[TTS] 오류: {e}")
@@ -437,6 +448,7 @@ def wake_word_loop():
                 print(f"[wake] heard: {text}")
             if any(p in text for p in WAKE_PHRASES):
                 print("[wake] ✅ Wake word detected!")
+                stop_speaking()   # 재생 중이면 끊기
                 socketio.emit("wake", {"heard": text})
                 threading.Thread(target=run_briefing, daemon=True).start()
                 time.sleep(30)   # cooldown — don't re-trigger mid-briefing
@@ -557,6 +569,7 @@ def youtube_search(query: str) -> str:
 
 def run_chat(user_text: str):
     global _chat_proc
+    stop_speaking()   # 말하는 중이면 즉시 끊기
     if _chat_proc and _chat_proc.poll() is None:
         _chat_proc.kill()
         _chat_proc = None
