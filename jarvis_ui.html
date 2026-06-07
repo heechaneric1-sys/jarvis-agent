@@ -5,614 +5,447 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>J.A.R.V.I.S.</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;background:#000;overflow:hidden;color:#00D4FF;
-  font-family:'Share Tech Mono','Courier New',monospace;user-select:none;}
+html,body{width:100%;height:100%;overflow:hidden;background:#020814;}
+#three-canvas{position:fixed;inset:0;z-index:0;}
 
 /* 스캔라인 */
-#scanlines{position:fixed;inset:0;z-index:999;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,255,.016) 2px,rgba(0,212,255,.016) 4px);
-  animation:sc 12s linear infinite;}
-@keyframes sc{to{background-position:0 200px;}}
-
-/* 레이아웃 — 세로: ORB 위, 채팅 아래 */
-#layout{display:flex;flex-direction:column;width:100%;height:100%;}
-
-/* ── 위쪽 ORB 패널 ── */
-#orb-panel{flex:0 0 48%;position:relative;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;}
-
-/* 코너 브라켓 */
-.hud-corner{position:absolute;width:48px;height:48px;opacity:.55;}
-.hud-corner::before,.hud-corner::after{content:'';position:absolute;background:#00D4FF;}
-.hud-corner::before{width:2px;height:100%;}
-.hud-corner::after{width:100%;height:2px;}
-.hud-corner.tl{top:20px;left:20px;}
-.hud-corner.tl::before,.hud-corner.tl::after{top:0;left:0;}
-.hud-corner.tr{top:20px;right:20px;}
-.hud-corner.tr::before{top:0;right:0;}
-.hud-corner.tr::after{top:0;right:0;}
-.hud-corner.bl{bottom:20px;left:20px;}
-.hud-corner.bl::before{bottom:0;left:0;}
-.hud-corner.bl::after{bottom:0;left:0;}
-.hud-corner.br{bottom:20px;right:20px;}
-.hud-corner.br::before{bottom:0;right:0;}
-.hud-corner.br::after{bottom:0;right:0;}
+#scanlines{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,150,255,.012) 3px,rgba(0,150,255,.012) 6px);}
 
 /* 타이틀 */
-#orb-title{position:absolute;top:26px;left:50%;transform:translateX(-50%);
-  font-family:'Orbitron',monospace;font-size:11px;letter-spacing:10px;
-  color:rgba(0,212,255,.55);font-weight:700;white-space:nowrap;}
+#title{
+  position:fixed;bottom:140px;left:50%;transform:translateX(-50%);
+  font-family:'Orbitron',monospace;font-size:clamp(18px,3vw,32px);
+  letter-spacing:clamp(8px,2vw,20px);font-weight:900;
+  color:#00D4FF;z-index:10;white-space:nowrap;
+  text-shadow:0 0 20px #00D4FF,0 0 60px rgba(0,212,255,.5),0 0 100px rgba(0,100,255,.3);
+}
+#title-line{
+  display:block;height:1px;width:100%;margin-top:8px;
+  background:linear-gradient(to right,transparent,#00D4FF,transparent);
+  opacity:.5;
+}
 
-/* 캔버스 */
-#orb-canvas{display:block;}
-
-/* 웨이크워드 배너 */
-#wake-banner{position:absolute;top:72px;left:50%;transform:translateX(-50%);
-  background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.4);
-  font-size:9px;letter-spacing:3px;padding:5px 16px;
-  color:rgba(0,212,255,.9);white-space:nowrap;opacity:0;transition:opacity .3s;
-  pointer-events:none;}
-#wake-banner.show{opacity:1;}
+/* HUD 코너 */
+.hc{position:fixed;width:44px;height:44px;z-index:10;opacity:.5;}
+.hc::before,.hc::after{content:'';position:absolute;background:#00D4FF;}
+.hc::before{width:2px;height:100%;}
+.hc::after{width:100%;height:2px;}
+.hc.tl{top:18px;left:18px;}
+.hc.tl::before,.hc.tl::after{top:0;left:0;}
+.hc.tr{top:18px;right:18px;}
+.hc.tr::before{top:0;right:0;}
+.hc.tr::after{top:0;right:0;}
+.hc.bl{bottom:18px;left:18px;}
+.hc.bl::before{bottom:0;left:0;}
+.hc.bl::after{bottom:0;left:0;}
+.hc.br{bottom:18px;right:18px;}
+.hc.br::before{bottom:0;right:0;}
+.hc.br::after{bottom:0;right:0;}
 
 /* 상태 */
-#orb-status{position:absolute;bottom:62px;left:50%;transform:translateX(-50%);
-  display:flex;align-items:center;gap:8px;font-size:9px;letter-spacing:5px;
-  color:rgba(0,212,255,.65);}
-#status-dot{width:6px;height:6px;border-radius:50%;background:#00D4FF;
-  animation:bk 1.4s ease-in-out infinite;}
-@keyframes bk{0%,100%{opacity:1;}50%{opacity:.15;}}
-#status-dot.active{background:#00FF88;animation:none;opacity:1;}
+#status-wrap{
+  position:fixed;top:22px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;z-index:10;
+  font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:5px;color:rgba(0,212,255,.6);
+}
+#sdot{width:7px;height:7px;border-radius:50%;background:#00D4FF;animation:bk 1.4s ease-in-out infinite;}
+@keyframes bk{0%,100%{opacity:1;}50%{opacity:.1;}}
+#sdot.on{background:#00FF88;animation:none;opacity:1;}
+
+/* 좌측 HUD */
+#hud-l{position:fixed;left:24px;top:50%;transform:translateY(-50%);
+  z-index:10;display:flex;flex-direction:column;gap:12px;opacity:.45;}
+.hi{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:2px;color:#00D4FF;
+  border-left:1px solid rgba(0,212,255,.3);padding-left:8px;line-height:1.8;}
+.hi span{display:block;color:rgba(0,212,255,.45);}
+
+/* 우측 HUD */
+#hud-r{position:fixed;right:24px;top:50%;transform:translateY(-50%);
+  z-index:10;display:flex;flex-direction:column;gap:12px;opacity:.45;align-items:flex-end;}
+.hr{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:2px;color:#00D4FF;
+  border-right:1px solid rgba(0,212,255,.3);padding-right:8px;line-height:1.8;text-align:right;}
+.hr span{display:block;color:rgba(0,212,255,.45);}
+
+/* 채팅 오버레이 */
+#chat-overlay{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  padding:0 40px 20px;
+  background:linear-gradient(to top,rgba(2,8,20,.95) 60%,transparent);
+}
+
+/* 실시간 인식 */
+#listen-bar{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 0;border-top:1px solid rgba(0,212,255,.15);
+  margin-bottom:8px;
+}
+#ldot{width:7px;height:7px;border-radius:50%;background:rgba(0,212,255,.25);flex-shrink:0;}
+#ldot.on{background:#00FF88;box-shadow:0 0 8px #00FF88;animation:bk .8s ease-in-out infinite;}
+#ltxt{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;
+  color:rgba(0,212,255,.4);font-style:italic;flex:1;}
+
+/* 메시지 */
+#msgs{display:flex;flex-direction:column;gap:10px;max-height:180px;overflow:hidden;}
+.mw{display:flex;flex-direction:column;gap:2px;}
+.ml{font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:3px;opacity:.4;}
+.ml.you{color:#00FF88;align-self:flex-end;}
+.ml.j{color:#00D4FF;}
+.mb{max-width:80%;padding:8px 12px;font-family:'Share Tech Mono',monospace;
+  font-size:11px;line-height:1.65;white-space:pre-wrap;word-break:break-word;}
+.mb.you{align-self:flex-end;background:rgba(0,255,136,.06);
+  border:1px solid rgba(0,255,136,.2);border-radius:2px 2px 0 2px;color:#00FF88;}
+.mb.j{align-self:flex-start;background:rgba(0,212,255,.06);
+  border:1px solid rgba(0,212,255,.2);border-radius:2px 2px 2px 0;color:#b8e8ff;}
+.cur{display:inline-block;width:6px;height:11px;background:#00D4FF;
+  margin-left:2px;vertical-align:middle;animation:bk .65s step-end infinite;}
 
 /* 브리핑 버튼 */
-#briefing-btn{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+#brief-btn{
+  position:fixed;bottom:22px;right:60px;z-index:11;
   background:transparent;border:1px solid rgba(0,212,255,.35);
   color:#00D4FF;font-family:'Share Tech Mono',monospace;
-  font-size:9px;letter-spacing:3px;padding:7px 22px;cursor:pointer;
-  transition:all .2s;white-space:nowrap;}
-#briefing-btn:hover{background:rgba(0,212,255,.1);border-color:#00D4FF;
-  box-shadow:0 0 14px rgba(0,212,255,.3);}
-
-/* HUD 통계 (좌하단) */
-#hud-stats{position:absolute;left:28px;bottom:100px;display:flex;
-  flex-direction:column;gap:7px;opacity:.45;}
-.hud-stat{font-size:8px;letter-spacing:2px;}
-.hud-stat .lbl{color:rgba(0,212,255,.5);margin-right:5px;}
-.hud-stat .up{color:#00FF88;}
-.hud-stat .dn{color:#FF4466;}
-
-/* HUD 우상단 */
-#hud-right{position:absolute;right:28px;top:72px;text-align:right;
-  display:flex;flex-direction:column;gap:7px;opacity:.4;}
-.hud-r{font-size:8px;letter-spacing:2px;}
-.hud-r .lbl{color:rgba(0,212,255,.5);margin-left:5px;}
-
-/* ── 구분선 ── */
-#divider{height:1px;width:100%;background:linear-gradient(to right,transparent,rgba(0,212,255,.25) 15%,rgba(0,212,255,.25) 85%,transparent);}
-
-/* ── 아래 채팅 패널 ── */
-#chat-panel{flex:1;display:flex;flex-direction:column;padding:0;position:relative;min-height:0;}
-
-#chat-header{padding:10px 24px;font-family:'Orbitron',monospace;
-  font-size:9px;letter-spacing:6px;color:rgba(0,212,255,.45);
-  border-bottom:1px solid rgba(0,212,255,.12);
-  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
-
-/* 로그 */
-#chat-log{flex:1;overflow-y:auto;padding:20px 24px;display:flex;
-  flex-direction:column;gap:18px;min-height:0;}
-#chat-log::-webkit-scrollbar{width:2px;}
-#chat-log::-webkit-scrollbar-thumb{background:rgba(0,212,255,.25);border-radius:2px;}
-
-.msg-wrap{display:flex;flex-direction:column;gap:3px;}
-.msg-lbl{font-size:7px;letter-spacing:3px;opacity:.45;}
-.msg-lbl.you{color:#00FF88;align-self:flex-end;}
-.msg-lbl.jarvis{color:#00D4FF;}
-.bubble{max-width:92%;padding:10px 14px;font-size:12px;line-height:1.75;
-  white-space:pre-wrap;word-break:break-word;}
-.bubble.you{align-self:flex-end;background:rgba(0,255,136,.05);
-  border:1px solid rgba(0,255,136,.2);border-radius:2px 2px 0 2px;color:#00FF88;}
-.bubble.jarvis{align-self:flex-start;background:rgba(0,212,255,.05);
-  border:1px solid rgba(0,212,255,.2);border-radius:2px 2px 2px 0;color:#c8f0ff;}
-.log-item{font-size:10px;letter-spacing:1px;color:rgba(0,212,255,.3);align-self:center;}
-
-/* 스트리밍 커서 */
-.cursor{display:inline-block;width:7px;height:13px;background:#00D4FF;
-  margin-left:3px;vertical-align:middle;
-  animation:cur .65s step-end infinite;}
-@keyframes cur{0%,100%{opacity:1;}50%{opacity:0;}}
-
-/* 빈 상태 */
-#empty-hint{opacity:.2;font-size:10px;letter-spacing:2px;margin-top:40px;text-align:center;}
-
-/* 실시간 음성 인식 바 */
-#listen-bar{
-  flex-shrink:0;
-  padding:10px 24px;
-  border-top:1px solid rgba(0,212,255,.12);
-  display:flex;align-items:center;gap:10px;
-  min-height:42px;
+  font-size:9px;letter-spacing:3px;padding:7px 18px;cursor:pointer;transition:all .2s;
 }
-#listen-indicator{width:8px;height:8px;border-radius:50%;background:rgba(0,212,255,.2);flex-shrink:0;transition:background .2s;}
-#listen-indicator.on{background:#00FF88;box-shadow:0 0 8px #00FF88;animation:bk 0.8s ease-in-out infinite;}
-#listen-transcript{font-size:11px;letter-spacing:1px;color:rgba(0,212,255,.45);font-style:italic;flex:1;}
+#brief-btn:hover{background:rgba(0,212,255,.1);border-color:#00D4FF;box-shadow:0 0 14px rgba(0,212,255,.3);}
+
+/* 시계 */
+#clock{position:fixed;top:22px;right:60px;z-index:10;
+  font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;
+  color:rgba(0,212,255,.4);}
 </style>
 </head>
 <body>
+<canvas id="three-canvas"></canvas>
 <div id="scanlines"></div>
 
-<div id="layout">
-  <!-- ORB 패널 -->
-  <div id="orb-panel">
-    <div class="hud-corner tl"></div>
-    <div class="hud-corner tr"></div>
-    <div class="hud-corner bl"></div>
-    <div class="hud-corner br"></div>
-    <div id="orb-title">J . A . R . V . I . S</div>
-    <div id="wake-banner">⬡ 웨이크워드 감지</div>
+<!-- HUD -->
+<div class="hc tl"></div><div class="hc tr"></div>
+<div class="hc bl"></div><div class="hc br"></div>
+<div id="status-wrap"><div id="sdot"></div><span id="stxt">STANDBY</span></div>
+<div id="clock"></div>
 
-    <canvas id="orb-canvas"></canvas>
+<div id="hud-l">
+  <div class="hi"><span>SYSTEM</span>ONLINE</div>
+  <div class="hi"><span>NEURAL</span>ACTIVE</div>
+  <div class="hi"><span>UPLINK</span>SECURE</div>
+</div>
+<div id="hud-r">
+  <div class="hr">MK.VII<span>VERSION</span></div>
+  <div class="hr">16 ACTIVE<span>AGENTS</span></div>
+  <div class="hr" id="hr-date"></div>
+</div>
 
-    <div id="hud-stats"></div>
-    <div id="hud-right">
-      <div class="hud-r">MK.VII <span class="lbl">VER</span></div>
-      <div class="hud-r">16 <span class="lbl">AGENTS</span></div>
-      <div class="hud-r" id="hud-time"></div>
-    </div>
+<!-- 타이틀 -->
+<div id="title">J.A.R.V.I.S<span id="title-line"></span></div>
 
-    <div id="orb-status">
-      <div id="status-dot"></div>
-      <span id="status-text">STANDBY</span>
-    </div>
-    <button id="briefing-btn">▶ MORNING BRIEFING</button>
-  </div>
-
-  <div id="divider"></div>
-
-  <!-- 채팅 패널 -->
-  <div id="chat-panel">
-    <div id="chat-header">
-      <span>COMMUNICATION LOG</span>
-      <span id="clock" style="opacity:.5;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;"></span>
-    </div>
-    <div id="chat-log">
-      <div id="empty-hint">자비스에게 말을 걸어보세요</div>
-    </div>
-    <div id="listen-bar">
-      <div id="listen-indicator"></div>
-      <div id="listen-transcript">마이크 대기 중...</div>
-    </div>
+<!-- 채팅 오버레이 -->
+<div id="chat-overlay">
+  <div id="msgs"></div>
+  <div id="listen-bar">
+    <div id="ldot"></div>
+    <div id="ltxt">마이크 초기화 중...</div>
   </div>
 </div>
 
-<audio id="tts-player" style="display:none;"></audio>
+<button id="brief-btn">▶ BRIEFING</button>
+<audio id="tts-audio" style="display:none"></audio>
 
 <script>
 /* ══════════════════════════════════════════════
-   ORB 애니메이션
+   THREE.JS 3D 구체
 ══════════════════════════════════════════════ */
-const canvas = document.getElementById('orb-canvas');
-const ctx    = canvas.getContext('2d');
-const TWO_PI = Math.PI * 2;
-const lerp   = (a,b,t) => a+(b-a)*t;
+const canvas3 = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({canvas:canvas3, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x020814, 1);
 
-let orbState = { t:0, mode:'idle', breathScale:1, ripples:[] };
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+camera.position.z = 4.5;
 
-function resizeCanvas(){
-  const panel = document.getElementById('orb-panel');
-  const sz = Math.min(panel.offsetWidth, panel.offsetHeight) * 0.58;
-  canvas.width = canvas.height = sz;
+function resize3(){
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
 }
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+resize3();
+window.addEventListener('resize', resize3);
 
-function setOrbMode(mode){
-  orbState.mode = mode;
-  if(mode !== 'speaking') orbState.ripples = [];
+/* 배경 그라디언트 (배경 구체) */
+const bgGeo = new THREE.SphereGeometry(50, 16, 16);
+const bgMat = new THREE.MeshBasicMaterial({
+  color:0x020814, side:THREE.BackSide
+});
+scene.add(new THREE.Mesh(bgGeo, bgMat));
 
-  const dot  = document.getElementById('status-dot');
-  const txt  = document.getElementById('status-text');
-  const labels = {idle:'STANDBY', listening:'LISTENING', speaking:'PROCESSING'};
-  txt.textContent = labels[mode] || mode.toUpperCase();
-  dot.className  = (mode !== 'idle') ? 'active' : '';
-}
+/* ── 메인 구체 그룹 ── */
+const orbGroup = new THREE.Group();
+scene.add(orbGroup);
 
-let lastTs = 0;
-function frame(ts){
-  const dt = Math.min((ts - lastTs)/1000, 0.05);
-  lastTs = ts;
-  const s = orbState;
-  s.t += dt;
+/* 외부 반투명 구체 */
+const outerGeo = new THREE.SphereGeometry(1.6, 32, 32);
+const outerMat = new THREE.MeshBasicMaterial({
+  color:0x0033aa, transparent:true, opacity:0.08, wireframe:false, side:THREE.FrontSide
+});
+orbGroup.add(new THREE.Mesh(outerGeo, outerMat));
 
-  const W=canvas.width, H=canvas.height, cx=W/2, cy=H/2;
-  const BASE = W * 0.38;
+/* 와이어프레임 구체 */
+const wireGeo = new THREE.SphereGeometry(1.55, 18, 18);
+const wireMat = new THREE.MeshBasicMaterial({color:0x004488, wireframe:true, transparent:true, opacity:0.12});
+orbGroup.add(new THREE.Mesh(wireGeo, wireMat));
 
-  ctx.clearRect(0,0,W,H);
+/* ── 노드 & 연결선 ── */
+const NODE_COUNT = 120;
+const nodePositions = [];
+const nodeGroup = new THREE.Group();
+orbGroup.add(nodeGroup);
 
-  /* 숨쉬기 */
-  let tb;
-  if      (s.mode==='idle')      tb = 1 + 0.03  * Math.sin(s.t * 0.7);
-  else if (s.mode==='listening') tb = 1 + 0.22  * Math.abs(Math.sin(s.t * 3.5));
-  else                           tb = 1 + 0.055 * Math.sin(s.t * 1.8);
-  s.breathScale = lerp(s.breathScale, tb, 0.08);
-  const R = BASE * s.breathScale;
-
-  /* 리플 (speaking) */
-  if(s.mode === 'speaking'){
-    if(s.t % 0.48 < dt + 0.012) s.ripples.push({r:R, a:0.75, sp:BASE*0.8});
-  }
-  s.ripples = s.ripples.filter(r=>r.a>0.01);
-  s.ripples.forEach(rp=>{
-    rp.r += rp.sp*dt; rp.a *= 0.962;
-    ctx.beginPath(); ctx.arc(cx,cy,rp.r,0,TWO_PI);
-    ctx.strokeStyle=`rgba(0,212,255,${rp.a*0.4})`; ctx.lineWidth=1.5; ctx.stroke();
-  });
-
-  drawTickRing(cx,cy, R*2.55,  s.t*0.1,  60, s.mode);
-  drawArcRing (cx,cy, R*1.98, -s.t*0.22,  6, s.mode);
-  drawArcRing (cx,cy, R*1.52,  s.t*0.52,  3, s.mode);
-
-  /* 외부 글로우 */
-  const gA = s.mode==='idle' ? 0.09 : s.mode==='listening' ? 0.26 : 0.17;
-  const bg = ctx.createRadialGradient(cx,cy,R*0.5,cx,cy,R*1.7);
-  bg.addColorStop(0, `rgba(0,140,255,${gA})`);
-  bg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(cx,cy,R*1.7,0,TWO_PI); ctx.fill();
-
-  drawOrb(cx,cy,R,s.t,s.mode);
-  if(s.mode==='listening') drawParticles(cx,cy,R,s.t);
-
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-function drawOrb(cx,cy,R,t,mode){
-  /* 테두리 */
-  ctx.beginPath(); ctx.arc(cx,cy,R,0,TWO_PI);
-  ctx.strokeStyle = mode==='idle' ? 'rgba(0,212,255,.55)' : 'rgba(0,212,255,1)';
-  ctx.lineWidth   = mode==='listening' ? 2.5 : 1.5;
-  ctx.stroke();
-
-  /* 내부 그라디언트 */
-  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
-  if(mode==='idle'){
-    g.addColorStop(0,'rgba(0,55,155,.55)'); g.addColorStop(1,'rgba(0,8,35,.1)');
-  } else if(mode==='listening'){
-    g.addColorStop(0,'rgba(0,170,255,.7)'); g.addColorStop(1,'rgba(0,28,75,.15)');
-  } else {
-    g.addColorStop(0,'rgba(0,90,210,.65)'); g.addColorStop(1,'rgba(0,12,55,.1)');
-  }
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R,0,TWO_PI); ctx.fill();
-
-  /* 헥사곤 패턴 */
-  drawHex(cx,cy,R*0.52,t*0.07,mode);
-
-  /* 중앙 코어 */
-  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.26);
-  cg.addColorStop(0,'rgba(200,240,255,.9)'); cg.addColorStop(1,'rgba(0,140,255,0)');
-  ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,R*0.26,0,TWO_PI); ctx.fill();
+// 구면 위 랜덤 노드
+const nodeSizes   = [];
+const nodeColors  = [];
+for(let i=0; i<NODE_COUNT; i++){
+  const phi   = Math.acos(2*Math.random()-1);
+  const theta = Math.random()*Math.PI*2;
+  const r     = 1.3 + Math.random()*0.25;
+  const x = r*Math.sin(phi)*Math.cos(theta);
+  const y = r*Math.sin(phi)*Math.sin(theta);
+  const z = r*Math.cos(phi);
+  nodePositions.push(new THREE.Vector3(x,y,z));
+  nodeSizes.push(Math.random()>0.85 ? 0.035 : 0.018);
+  // 70% cyan, 30% orange
+  nodeColors.push(Math.random()>0.3 ? 0x00D4FF : 0xFF6B2B);
 }
 
-function drawHex(cx,cy,R,angle,mode){
-  const a=mode==='idle'?0.1:0.25;
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
-  ctx.strokeStyle=`rgba(0,212,255,${a})`; ctx.lineWidth=0.5;
-  for(let i=0;i<6;i++){
-    const ag=(i/6)*TWO_PI;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(ag)*R*0.25,Math.sin(ag)*R*0.25);
-    ctx.lineTo(Math.cos(ag)*R,     Math.sin(ag)*R);
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  for(let i=0;i<6;i++){
-    const ag=(i/6)*TWO_PI-Math.PI/6;
-    i===0?ctx.moveTo(Math.cos(ag)*R,Math.sin(ag)*R):ctx.lineTo(Math.cos(ag)*R,Math.sin(ag)*R);
-  }
-  ctx.closePath();
-  ctx.strokeStyle=`rgba(0,212,255,${a*1.8})`; ctx.lineWidth=1; ctx.stroke();
-  ctx.restore();
-}
+// 노드 메시들
+nodePositions.forEach((pos,i)=>{
+  const geo = new THREE.SphereGeometry(nodeSizes[i],6,6);
+  const mat = new THREE.MeshBasicMaterial({color:nodeColors[i]});
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.copy(pos);
+  nodeGroup.add(mesh);
+});
 
-function drawArcRing(cx,cy,R,angle,segs,mode){
-  const a=mode==='idle'?0.28:0.62; const gap=0.15;
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
-  for(let i=0;i<segs;i++){
-    const s=(i/segs)*TWO_PI+gap, e=((i+1)/segs)*TWO_PI-gap;
-    ctx.beginPath(); ctx.arc(0,0,R,s,e);
-    ctx.strokeStyle=`rgba(0,212,255,${a})`; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(Math.cos(e)*R,Math.sin(e)*R,2,0,TWO_PI);
-    ctx.fillStyle=`rgba(0,212,255,${a*1.5})`; ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawTickRing(cx,cy,R,angle,ticks,mode){
-  const a=mode==='idle'?0.16:0.38;
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle);
-  for(let i=0;i<ticks;i++){
-    const ag=(i/ticks)*TWO_PI, maj=i%10===0, len=maj?11:4;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(ag)*R,Math.sin(ag)*R);
-    ctx.lineTo(Math.cos(ag)*(R-len),Math.sin(ag)*(R-len));
-    ctx.strokeStyle=`rgba(0,212,255,${maj?a*2:a})`; ctx.lineWidth=maj?1.5:.5; ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawParticles(cx,cy,R,t){
-  for(let i=0;i<12;i++){
-    const a=(i/12)*TWO_PI+t*0.8;
-    const d=R*1.08+Math.sin(t*3+i)*R*0.22;
-    const al=0.28+0.42*Math.abs(Math.sin(t*2+i*0.7));
-    const sz=1.4+1.4*Math.abs(Math.sin(t*2.5+i));
-    ctx.beginPath();
-    ctx.arc(cx+Math.cos(a)*d, cy+Math.sin(a)*d, sz, 0, TWO_PI);
-    ctx.fillStyle=`rgba(0,212,255,${al})`; ctx.fill();
+// 연결선 (거리 0.7 이내)
+const lineGeo = new THREE.BufferGeometry();
+const lineVerts = [];
+for(let i=0;i<NODE_COUNT;i++){
+  for(let j=i+1;j<NODE_COUNT;j++){
+    if(nodePositions[i].distanceTo(nodePositions[j])<0.72){
+      lineVerts.push(nodePositions[i].x,nodePositions[i].y,nodePositions[i].z);
+      lineVerts.push(nodePositions[j].x,nodePositions[j].y,nodePositions[j].z);
+    }
   }
 }
+lineGeo.setAttribute('position',new THREE.Float32BufferAttribute(lineVerts,3));
+const lineMat = new THREE.LineBasicMaterial({color:0x0077bb, transparent:true, opacity:0.25});
+orbGroup.add(new THREE.LineSegments(lineGeo, lineMat));
+
+/* ── 내부 코어 구체 ── */
+const coreGeo = new THREE.SphereGeometry(0.45,32,32);
+const coreMat = new THREE.MeshBasicMaterial({color:0x44ccff, transparent:true, opacity:0.7});
+const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+orbGroup.add(coreMesh);
+
+// 코어 내부 밝은 점
+const innerGeo = new THREE.SphereGeometry(0.2,16,16);
+const innerMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.85});
+orbGroup.add(new THREE.Mesh(innerGeo,innerMat));
+
+/* ── 궤도 링 ── */
+function makeRing(r, tube, color, rotX, rotZ, opacity=0.3){
+  const geo = new THREE.TorusGeometry(r, tube, 4, 80);
+  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity, wireframe:false});
+  const m   = new THREE.Mesh(geo, mat);
+  m.rotation.x = rotX;
+  m.rotation.z = rotZ;
+  return m;
+}
+orbGroup.add(makeRing(1.85, 0.004, 0x0088cc, Math.PI/2,   0,      0.35));
+orbGroup.add(makeRing(1.85, 0.004, 0x0088cc, Math.PI/4,   Math.PI/6, 0.2));
+orbGroup.add(makeRing(2.0,  0.003, 0x005577, Math.PI*0.6, Math.PI/3, 0.18));
+orbGroup.add(makeRing(2.15, 0.003, 0x004466, 0.2,         Math.PI/2, 0.15));
+
+/* ── 외부 파티클 ── */
+const PART_COUNT = 350;
+const partPositions = new Float32Array(PART_COUNT*3);
+for(let i=0;i<PART_COUNT;i++){
+  const phi   = Math.acos(2*Math.random()-1);
+  const theta = Math.random()*Math.PI*2;
+  const r     = 1.9 + Math.random()*1.4;
+  partPositions[i*3]   = r*Math.sin(phi)*Math.cos(theta);
+  partPositions[i*3+1] = r*Math.sin(phi)*Math.sin(theta);
+  partPositions[i*3+2] = r*Math.cos(phi);
+}
+const partGeo = new THREE.BufferGeometry();
+partGeo.setAttribute('position',new THREE.Float32BufferAttribute(partPositions,3));
+const partMat = new THREE.PointsMaterial({color:0x0099cc, size:0.015, transparent:true, opacity:0.5});
+scene.add(new THREE.Points(partGeo, partMat));
+
+/* ── 애니메이션 상태 ── */
+let appMode = 'idle';
+let breathT = 0;
+
+function setMode(m){
+  appMode=m;
+  const dot=document.getElementById('sdot');
+  const txt=document.getElementById('stxt');
+  const map={idle:'STANDBY',listening:'LISTENING',speaking:'PROCESSING'};
+  txt.textContent=map[m]||m.toUpperCase();
+  dot.className=m!=='idle'?'on':'';
+}
+
+/* ── 렌더 루프 ── */
+let clock3 = new THREE.Clock();
+
+renderer.setAnimationLoop(()=>{
+  const dt = clock3.getDelta();
+  breathT += dt;
+
+  let targetScale;
+  if     (appMode==='idle')      targetScale = 1 + 0.025*Math.sin(breathT*0.7);
+  else if(appMode==='listening') targetScale = 1 + 0.12*Math.abs(Math.sin(breathT*3.5));
+  else                           targetScale = 1 + 0.04*Math.sin(breathT*2);
+
+  orbGroup.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale),0.06);
+
+  // 천천히 회전
+  const rotSpeed = appMode==='idle' ? 0.07 : appMode==='listening' ? 0.25 : 0.12;
+  orbGroup.rotation.y += dt * rotSpeed;
+  orbGroup.rotation.x  = Math.sin(breathT*0.15)*0.08;
+
+  nodeGroup.rotation.y -= dt * 0.04;
+
+  // 코어 펄스
+  const coreAlpha = 0.5 + 0.3*Math.abs(Math.sin(breathT*1.5));
+  coreMat.opacity = coreAlpha;
+
+  renderer.render(scene, camera);
+});
 
 /* ══════════════════════════════════════════════
-   채팅 로그
+   채팅
 ══════════════════════════════════════════════ */
-const chatLog   = document.getElementById('chat-log');
-const emptyHint = document.getElementById('empty-hint');
-let   streamDiv = null;
-let   streamBubble = null;
-
-function removeEmpty(){
-  if(emptyHint && emptyHint.parentNode) emptyHint.remove();
-}
+const msgsEl = document.getElementById('msgs');
+let streamBubble = null;
+let streamText   = '';
 
 function addMsg(role, text){
-  removeEmpty();
-  const wrap = document.createElement('div');
-  wrap.className = 'msg-wrap';
-  const lbl = document.createElement('div');
-  lbl.className = `msg-lbl ${role}`;
-  lbl.textContent = role === 'you' ? 'YOU' : 'JARVIS';
-  const bubble = document.createElement('div');
-  bubble.className = `bubble ${role}`;
-  bubble.textContent = text;
-  wrap.appendChild(lbl);
-  wrap.appendChild(bubble);
-  chatLog.appendChild(wrap);
-  chatLog.scrollTop = chatLog.scrollHeight;
-  return bubble;
-}
-
-function addLog(text){
-  removeEmpty();
-  const el = document.createElement('div');
-  el.className = 'log-item';
-  el.textContent = text;
-  chatLog.appendChild(el);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  const w=document.createElement('div'); w.className='mw';
+  const l=document.createElement('div'); l.className=`ml ${role}`;
+  l.textContent=role==='you'?'YOU':'JARVIS';
+  const b=document.createElement('div'); b.className=`mb ${role}`;
+  b.textContent=text;
+  w.appendChild(l); w.appendChild(b);
+  msgsEl.appendChild(w);
+  // 최대 4개만 유지
+  while(msgsEl.children.length>4) msgsEl.removeChild(msgsEl.firstChild);
+  return b;
 }
 
 function startStream(){
-  removeEmpty();
-  const wrap = document.createElement('div');
-  wrap.className = 'msg-wrap';
-  const lbl = document.createElement('div');
-  lbl.className = 'msg-lbl jarvis';
-  lbl.textContent = 'JARVIS';
-  streamBubble = document.createElement('div');
-  streamBubble.className = 'bubble jarvis';
-  const cur = document.createElement('span');
-  cur.className = 'cursor';
+  const w=document.createElement('div'); w.className='mw';
+  const l=document.createElement('div'); l.className='ml j'; l.textContent='JARVIS';
+  streamBubble=document.createElement('div'); streamBubble.className='mb j';
+  const cur=document.createElement('span'); cur.className='cur';
   streamBubble.appendChild(cur);
-  wrap.appendChild(lbl);
-  wrap.appendChild(streamBubble);
-  chatLog.appendChild(wrap);
-  streamDiv = wrap;
-  chatLog.scrollTop = chatLog.scrollHeight;
+  w.appendChild(l); w.appendChild(streamBubble);
+  msgsEl.appendChild(w);
+  while(msgsEl.children.length>4) msgsEl.removeChild(msgsEl.firstChild);
 }
 
 function appendStream(chunk){
   if(!streamBubble) startStream();
-  const cur = streamBubble.querySelector('.cursor');
-  const txt = document.createTextNode(chunk);
-  if(cur) streamBubble.insertBefore(txt, cur);
-  else streamBubble.appendChild(txt);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  streamText+=chunk;
+  const cur=streamBubble.querySelector('.cur');
+  const t=document.createTextNode(chunk);
+  streamBubble.insertBefore(t,cur);
 }
 
-function endStream(full){
-  if(streamBubble){
-    const cur = streamBubble.querySelector('.cursor');
-    if(cur) cur.remove();
-  }
-  streamDiv = streamBubble = null;
-}
-
-/* ══════════════════════════════════════════════
-   TTS (ElevenLabs via /tts)
-══════════════════════════════════════════════ */
-const ttsPlayer = document.getElementById('tts-player');
-let   ttsQueue  = [];
-let   ttsPlaying = false;
-
-function speak(text){
-  if(!text || !text.trim()) return;
-  ttsQueue.push(text);
-  if(!ttsPlaying) playNext();
-}
-
-function playNext(){
-  if(!ttsQueue.length){ ttsPlaying=false; return; }
-  ttsPlaying = true;
-  const text = ttsQueue.shift();
-  const url  = `/tts?text=${encodeURIComponent(text.slice(0, 400))}`;
-  ttsPlayer.src = url;
-  ttsPlayer.onended = ()=>{ setOrbMode('idle'); playNext(); };
-  ttsPlayer.onerror = ()=>{ ttsPlaying=false; setOrbMode('idle'); playNext(); };
-  ttsPlayer.play().catch(()=>{ ttsPlaying=false; playNext(); });
-  setOrbMode('speaking');
+function endStream(){
+  if(streamBubble){const c=streamBubble.querySelector('.cur');if(c)c.remove();}
+  streamBubble=null; streamText='';
 }
 
 /* ══════════════════════════════════════════════
    Socket.IO
 ══════════════════════════════════════════════ */
-const socket = io('http://localhost:5001');
-
-socket.on('connect',    ()=>addLog('▸ JARVIS 연결됨'));
-socket.on('disconnect', ()=>addLog('▸ 연결 끊김'));
-
-socket.on('state', d=>{
-  const m = d.status==='idle'?'idle':d.status==='listening'?'listening':'speaking';
-  setOrbMode(m);
+const socket=io('http://localhost:5001');
+socket.on('connect',    ()=>{});
+socket.on('state',      d=>setMode(d.status==='idle'?'idle':d.status==='listening'?'listening':'speaking'));
+socket.on('wake',       d=>{
+  const ltxt=document.getElementById('ltxt');
+  ltxt.textContent=`⬡ 감지: "${d.heard}"`;
+  ltxt.style.color='rgba(0,255,136,.7)';
+  setMode('listening');
+  setTimeout(()=>{ltxt.style.color='rgba(0,212,255,.4)';},3000);
 });
+socket.on('chat_user',  t=>{addMsg('you',t);setMode('listening');});
+socket.on('speak_now',  t=>{addMsg('j',t);});
+socket.on('text_chunk', c=>{setMode('speaking');appendStream(c);});
+socket.on('text_done',  f=>{endStream();if(f)addMsg('j',f);setMode('idle');});
+socket.on('data',       d=>{if(d.stocks)renderStocks(d.stocks);});
+socket.on('error',      e=>{addMsg('j',`⚠ ${e}`);setMode('idle');});
 
-socket.on('wake', d=>{
-  const banner = document.getElementById('wake-banner');
-  banner.textContent = `⬡ 웨이크워드 감지 : "${d.heard}"`;
-  banner.classList.add('show');
-  setOrbMode('listening');
-  setTimeout(()=>banner.classList.remove('show'), 3000);
-});
-
-socket.on('chat_user', text=>{
-  addMsg('you', text);
-  setOrbMode('listening');
-});
-
-socket.on('speak_now', text=>{
-  addMsg('jarvis', text);
-  speak(text);
-});
-
-socket.on('text_chunk', chunk=>{
-  setOrbMode('speaking');
-  appendStream(chunk);
-});
-
-socket.on('text_done', full=>{
-  endStream(full);
-  if(full && !streamDiv){
-    // speak_now가 아닌 경우 버블 이미 있으므로 TTS만
-  }
-  speak(full);
-  setOrbMode('idle');
-});
-
-socket.on('data', d=>{
-  if(d.stocks) renderStocks(d.stocks);
-});
-
-socket.on('log', msg=>{
-  addLog(msg);
-});
-
-socket.on('error', e=>{
-  addMsg('jarvis', `⚠ ${e}`);
-  setOrbMode('idle');
-});
-
-/* ══════════════════════════════════════════════
-   주식 HUD
-══════════════════════════════════════════════ */
 function renderStocks(stocks){
-  const el = document.getElementById('hud-stats');
-  el.innerHTML = '';
-  stocks.slice(0,4).forEach(s=>{
-    const div = document.createElement('div');
-    div.className = 'hud-stat';
-    const chg  = typeof s.change==='number' ? s.change : 0;
-    const cls  = chg >= 0 ? 'up' : 'dn';
-    const sign = chg >= 0 ? '+' : '';
-    div.innerHTML = `<span class="lbl">${s.symbol}</span>${s.price} <span class="${cls}">${sign}${chg.toFixed(2)}%</span>`;
-    el.appendChild(div);
+  const el=document.getElementById('hud-l');
+  el.innerHTML='';
+  stocks.slice(0,3).forEach(s=>{
+    const chg=typeof s.change==='number'?s.change:0;
+    const col=chg>=0?'#00FF88':'#FF4466';
+    const d=document.createElement('div'); d.className='hi';
+    d.innerHTML=`<span>${s.symbol}</span>${s.price} <span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
+    el.appendChild(d);
   });
 }
 
 /* ══════════════════════════════════════════════
-   실시간 음성 인식 (Web Speech API)
+   Web Speech API — 실시간 음성 인식
 ══════════════════════════════════════════════ */
-const indicator  = document.getElementById('listen-indicator');
-const transcript = document.getElementById('listen-transcript');
-const SpeechRec  = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const ldot=document.getElementById('ldot');
+const ltxt=document.getElementById('ltxt');
 
-if(SpeechRec){
-  const rec = new SpeechRec();
-  rec.lang = 'ko-KR';
-  rec.continuous = true;
-  rec.interimResults = true;
-
-  rec.onstart = ()=>{
-    indicator.classList.add('on');
-    transcript.textContent = '듣고 있습니다...';
-    transcript.style.color = 'rgba(0,255,136,.6)';
-  };
-
-  rec.onend = ()=>{
-    indicator.classList.remove('on');
-    transcript.textContent = '마이크 대기 중...';
-    transcript.style.color = 'rgba(0,212,255,.45)';
-    // 자동 재시작
-    setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 300);
-  };
-
-  rec.onresult = (e)=>{
-    let interim = '', final = '';
-    for(let i = e.resultIndex; i < e.results.length; i++){
-      const t = e.results[i][0].transcript;
-      if(e.results[i].isFinal) final += t;
-      else interim += t;
+if(SR){
+  const rec=new SR();
+  rec.lang='ko-KR'; rec.continuous=true; rec.interimResults=true;
+  rec.onstart=()=>{ldot.className='on';ltxt.textContent='듣고 있습니다...';ltxt.style.color='rgba(0,212,255,.5)';};
+  rec.onend=()=>{ldot.className='';ltxt.textContent='마이크 대기...';setTimeout(()=>{try{rec.start();}catch(e){}},400);};
+  rec.onresult=(e)=>{
+    let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      e.results[i].isFinal?final+=t:interim+=t;
     }
-
-    // 실시간 중간 결과 표시
-    if(interim){
-      transcript.textContent = interim;
-      transcript.style.color = 'rgba(0,255,136,.8)';
-      setOrbMode('listening');
-    }
-
-    // 최종 확정 → 서버로 전송
+    if(interim){ltxt.textContent=interim;ltxt.style.color='rgba(0,255,136,.8)';setMode('listening');}
     if(final.trim()){
-      transcript.textContent = '처리 중...';
-      transcript.style.color = 'rgba(0,212,255,.5)';
-      socket.emit('user_message', {text: final.trim()});
-      addMsg('you', final.trim());
-      setOrbMode('listening');
+      ltxt.textContent='전송 중...';ltxt.style.color='rgba(0,212,255,.5)';
+      socket.emit('user_message',{text:final.trim()});
+      addMsg('you',final.trim());
+      setMode('listening');
     }
   };
+  rec.onerror=(e)=>{if(e.error==='not-allowed')ltxt.textContent='마이크 권한을 허용해주세요';};
+  try{rec.start();}catch(e){}
+}else{ltxt.textContent='Chrome에서 열어주세요 (음성인식 필요)';}
 
-  rec.onerror = (e)=>{
-    if(e.error === 'not-allowed'){
-      transcript.textContent = '마이크 권한을 허용해주세요';
-    }
-  };
-
-  // 시작
-  try{ rec.start(); }catch(e){}
-} else {
-  transcript.textContent = '이 브라우저는 음성 인식을 지원하지 않습니다 (Chrome 권장)';
-}
-
-/* ══════════════════════════════════════════════
-   브리핑 버튼
-══════════════════════════════════════════════ */
-document.getElementById('briefing-btn').addEventListener('click', ()=>{
+/* 브리핑 */
+document.getElementById('brief-btn').addEventListener('click',()=>{
   fetch('/trigger_briefing').catch(()=>{});
-  addMsg('you', '브리핑 시작');
-  setOrbMode('listening');
+  addMsg('you','브리핑 시작');setMode('listening');
 });
 
-/* ══════════════════════════════════════════════
-   시계
-══════════════════════════════════════════════ */
+/* 시계 */
 function tick(){
-  const now = new Date();
-  document.getElementById('clock').textContent =
-    now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  document.getElementById('hud-time').textContent =
-    now.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'});
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('hr-date').innerHTML=n.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+'<span>DATE</span>';
 }
-tick(); setInterval(tick, 1000);
+tick();setInterval(tick,1000);
 </script>
 </body>
 </html>

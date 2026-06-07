@@ -316,6 +316,32 @@ def build_briefing_prompt(data: dict) -> str:
 - 마지막은 "브리핑 종료입니다"로"""
 
 
+def speak_server(text: str):
+    """ElevenLabs TTS → afplay (서버에서 직접 재생)."""
+    if not text or not ELEVENLABS_API_KEY:
+        return
+    import requests as _req, tempfile, os as _os
+    voice_id = ELEVENLABS_VOICE_ID or "JBFqnCBsd6RMkjVDRZzb"
+    try:
+        r = _req.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+            json={"text": text[:500], "model_id": "eleven_multilingual_v2",
+                  "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            print(f"[TTS] ElevenLabs 오류: {r.status_code}")
+            return
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            f.write(r.content)
+            tmp = f.name
+        subprocess.run(["afplay", tmp])
+        _os.unlink(tmp)
+    except Exception as e:
+        print(f"[TTS] 오류: {e}")
+
+
 def run_briefing():
     if _busy.is_set():
         return
@@ -323,7 +349,9 @@ def run_briefing():
     try:
         set_state("processing")
         # 데이터 수집 중 공백 채우기 — 즉시 TTS
-        socketio.emit("speak_now", "잠시만요. 실시간 데이터를 수집하고 있습니다.")
+        msg = "잠시만요. 실시간 데이터를 수집하고 있습니다."
+        socketio.emit("speak_now", msg)
+        threading.Thread(target=speak_server, args=(msg,), daemon=True).start()
         data = collect_all()
         global _last_data
         _last_data = data
@@ -347,7 +375,9 @@ def run_briefing():
             full += chunk
             socketio.emit("text_chunk", chunk)
         proc.wait()
-        socketio.emit("text_done", full.strip())
+        full = full.strip()
+        socketio.emit("text_done", full)
+        threading.Thread(target=speak_server, args=(full,), daemon=True).start()
 
     except Exception as e:
         socketio.emit("error", str(e))
@@ -533,7 +563,9 @@ def run_chat(user_text: str):
             full += chunk
             socketio.emit("text_chunk", chunk)
         _chat_proc.wait()
-        socketio.emit("text_done", full.strip())
+        full = full.strip()
+        socketio.emit("text_done", full)
+        threading.Thread(target=speak_server, args=(full,), daemon=True).start()
     except Exception as e:
         socketio.emit("error", str(e))
     finally:
