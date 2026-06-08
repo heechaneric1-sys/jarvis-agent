@@ -25,10 +25,16 @@ from flask_socketio import SocketIO, emit
 
 # Notion / Obsidian 연동
 try:
-    from jarvis_notion_obsidian import handle_note_command, obsidian_save, obsidian_search
+    from jarvis_notion_obsidian import (
+        handle_note_command, obsidian_save, obsidian_search,
+        log_conversation, get_notion_todos, morning_briefing_with_notion,
+        idea_to_business_plan, sync_notion_to_obsidian
+    )
     _notion_ok = True
-except Exception:
+    print("[Notion] 연동 OK")
+except Exception as e:
     _notion_ok = False
+    print(f"[Notion] 연동 실패: {e}")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 WATCH_SYMBOLS = ["AAPL", "NVDA", "TSLA", "BTC-USD", "^GSPC"]
@@ -300,6 +306,15 @@ def build_briefing_prompt(data: dict) -> str:
     if data.get("quote"):
         q = data["quote"]
         parts.append(f"[명언]\n\"{q['text']}\" — {q['author']}")
+
+    # Notion 할일 포함
+    if _notion_ok:
+        try:
+            todos = get_notion_todos()
+            if todos and "없습니다" not in todos:
+                parts.append(f"[오늘 할일 — Notion]\n{todos}")
+        except Exception:
+            pass
 
     context = "\n\n".join(parts)
 
@@ -665,6 +680,9 @@ User: {user_text}"""
         full = full.strip()
         socketio.emit("text_done", full)
         threading.Thread(target=speak_server, args=(full,), daemon=True).start()
+        # Notion 대화 자동 기록
+        if _notion_ok and full:
+            threading.Thread(target=log_conversation, args=(user_text, full), daemon=True).start()
     except Exception as e:
         socketio.emit("error", str(e))
     finally:
