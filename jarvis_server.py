@@ -333,15 +333,31 @@ def stop_speaking():
         _afplay_proc = None
 
 def speak_server(text: str):
-    """TTS: macOS Yuna."""
+    """TTS: Edge TTS (en-US-GuyNeural) → afplay."""
     global _afplay_proc
     if not text:
         return
+    import tempfile, asyncio, os as _os
     try:
-        _afplay_proc = subprocess.Popen(["say", "-v", "Yuna", text[:500]])
+        import edge_tts
+        tmp = tempfile.mktemp(suffix=".mp3")
+
+        async def _tts():
+            communicate = edge_tts.Communicate(text[:500], "en-US-GuyNeural")
+            await communicate.save(tmp)
+
+        asyncio.run(_tts())
+        _afplay_proc = subprocess.Popen(["afplay", tmp])
         _afplay_proc.wait()
+        _os.unlink(tmp)
     except Exception as e:
-        print(f"[TTS] 오류: {e}")
+        print(f"[TTS] Edge TTS 오류: {e}")
+        # 폴백: macOS say
+        try:
+            _afplay_proc = subprocess.Popen(["say", text[:500]])
+            _afplay_proc.wait()
+        except Exception:
+            pass
 
 
 def run_briefing():
@@ -700,6 +716,44 @@ def tts():
         try: os.unlink(tmp.name)
         except: pass
     return response
+
+
+@app.route("/n8n_chat", methods=["POST"])
+def n8n_chat():
+    """n8n에서 호출 → Claude 응답 → JSON 반환."""
+    data    = request.get_json(force=True) or {}
+    text    = data.get("text", "").strip()
+    route   = data.get("route", "command-center")
+    if not text:
+        return jsonify({"response": ""}), 400
+
+    SYSTEMS = {
+        "youtube-trends":   "너는 JARVIS다. YouTube 트렌드 분석 전문가. 한국어로 간결하게.",
+        "shorts-scripter":  "너는 JARVIS다. 60초 쇼츠 스크립트 전문가. 훅→본문→CTA 형식으로.",
+        "blog-writer":      "너는 JARVIS다. 블로그 콘텐츠 작성 전문가. 한국어로.",
+        "paper-translator": "너는 JARVIS다. 전문 번역가. 한국어↔영어 자동 감지.",
+        "hook-generator":   "너는 JARVIS다. 바이럴 훅 문장 전문가. 5가지 스타일로.",
+        "email-manager":    "너는 JARVIS다. 비즈니스 이메일 전문가.",
+        "linkedin-briefing":"너는 JARVIS다. 링크드인 콘텐츠 전문가.",
+        "n8n-builder":      "너는 JARVIS다. n8n 자동화 워크플로우 전문가.",
+        "command-center":   "너는 JARVIS다. 아이언맨 토니 스타크의 AI 비서. 스타크씨라고 불러. 한국어로.",
+    }
+    system = SYSTEMS.get(route, SYSTEMS["command-center"])
+
+    try:
+        CLAUDE_BIN = Path.home() / "Library/Application Support/Claude/claude-code/2.1.156/claude.app/Contents/MacOS/claude"
+        import os as _eo
+        env = {k: v for k, v in _eo.environ.items() if k != "ANTHROPIC_API_KEY"}
+        prompt = f"{system}\n\n사용자: {text}"
+        proc = subprocess.run(
+            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch"],
+            capture_output=True, text=True, env=env, timeout=55,
+        )
+        response = proc.stdout.strip() or proc.stderr.strip()
+    except Exception as e:
+        response = f"오류: {e}"
+
+    return jsonify({"response": response, "route": route})
 
 
 @app.route("/trigger_briefing", methods=["POST", "GET"])
