@@ -333,31 +333,41 @@ def stop_speaking():
         _afplay_proc = None
 
 def speak_server(text: str):
-    """ElevenLabs TTS → afplay (서버에서 직접 재생)."""
+    """TTS: ElevenLabs 우선, 크레딧 없으면 macOS say 폴백."""
     global _afplay_proc
-    if not text or not ELEVENLABS_API_KEY:
+    if not text:
         return
     import requests as _req, tempfile, os as _os
-    voice_id = ELEVENLABS_VOICE_ID or "JBFqnCBsd6RMkjVDRZzb"
+
+    # ── ElevenLabs 시도 ──
+    if ELEVENLABS_API_KEY:
+        voice_id = ELEVENLABS_VOICE_ID or "JBFqnCBsd6RMkjVDRZzb"
+        try:
+            r = _req.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+                json={"text": text[:500], "model_id": "eleven_multilingual_v2",
+                      "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
+                timeout=20,
+            )
+            if r.status_code == 200:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(r.content); tmp = f.name
+                _afplay_proc = subprocess.Popen(["afplay", tmp])
+                _afplay_proc.wait()
+                _os.unlink(tmp)
+                return
+            else:
+                print(f"[TTS] ElevenLabs 실패({r.status_code}), macOS say 폴백")
+        except Exception as e:
+            print(f"[TTS] ElevenLabs 오류: {e}, macOS say 폴백")
+
+    # ── macOS say 폴백 ──
     try:
-        r = _req.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-            json={"text": text[:500], "model_id": "eleven_multilingual_v2",
-                  "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
-            timeout=20,
-        )
-        if r.status_code != 200:
-            print(f"[TTS] ElevenLabs 오류: {r.status_code}")
-            return
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            f.write(r.content)
-            tmp = f.name
-        _afplay_proc = subprocess.Popen(["afplay", tmp])
+        _afplay_proc = subprocess.Popen(["say", "-v", "Yuna", text[:500]])
         _afplay_proc.wait()
-        _os.unlink(tmp)
     except Exception as e:
-        print(f"[TTS] 오류: {e}")
+        print(f"[TTS] say 오류: {e}")
 
 
 def run_briefing():
