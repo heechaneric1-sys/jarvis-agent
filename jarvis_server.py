@@ -362,7 +362,7 @@ def run_briefing():
         # 데이터 수집 중 공백 채우기 — 즉시 TTS
         msg = "잠시만요. 실시간 데이터를 수집하고 있습니다."
         socketio.emit("speak_now", msg)
-        threading.Thread(target=speak_server, args=(msg,), daemon=True).start()
+        speak_server(msg)   # 다 읽을 때까지 기다린 후 브리핑 시작
         data = collect_all()
         global _last_data
         _last_data = data
@@ -378,7 +378,7 @@ def run_briefing():
         import os as _env_os
         env = {k:v for k,v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "-p", prompt, "--allowedTools", "WebSearch,computer"],
+            [str(CLAUDE_BIN), "--fast", "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         full = ""
@@ -618,21 +618,23 @@ User: {user_text}"""
         )
         import os as _env_os
         env = {k: v for k, v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        _chat_proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "-p", prompt, "--allowedTools", "WebSearch,computer"],
+        proc = subprocess.Popen(   # 로컬 변수 사용 — 전역 _chat_proc 접근 경쟁 방지
+            [str(CLAUDE_BIN), "--fast", "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
+        _chat_proc = proc          # 외부에서 kill 가능하도록 전역에도 저장
         full = ""
-        for chunk in iter(lambda: _chat_proc.stdout.read(8), ""):
+        for chunk in iter(lambda: proc.stdout.read(8), ""):
             full += chunk
             socketio.emit("text_chunk", chunk)
-        _chat_proc.wait()
+        proc.wait()
         full = full.strip()
         socketio.emit("text_done", full)
         threading.Thread(target=speak_server, args=(full,), daemon=True).start()
     except Exception as e:
         socketio.emit("error", str(e))
     finally:
+        _chat_proc = None
         set_state("idle")
 
 
