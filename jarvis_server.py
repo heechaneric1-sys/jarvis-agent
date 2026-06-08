@@ -385,7 +385,7 @@ def run_briefing():
         import os as _env_os
         env = {k:v for k,v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch,computer"],
+            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         full = ""
@@ -653,7 +653,7 @@ User: {user_text}"""
         import os as _env_os
         env = {k: v for k, v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(   # 로컬 변수 사용 — 전역 _chat_proc 접근 경쟁 방지
-            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch,computer"],
+            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         _chat_proc = proc          # 외부에서 kill 가능하도록 전역에도 저장
