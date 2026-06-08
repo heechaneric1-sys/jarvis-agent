@@ -347,32 +347,58 @@ def stop_speaking():
         _afplay_proc.kill()
         _afplay_proc = None
 
+FISH_AUDIO_API_KEY  = _os.environ.get("FISH_AUDIO_API_KEY", "")
+FISH_AUDIO_VOICE_ID = "612b878b113047d9a770c069c8b4fdfe"  # MCU Jarvis
+
 def speak_server(text: str):
-    """TTS: Edge TTS (en-US-GuyNeural) → afplay."""
+    """TTS: Fish Audio (MCU Jarvis) → afplay. 실패 시 Edge TTS 폴백."""
     global _afplay_proc
     if not text:
         return
-    import tempfile, asyncio, os as _os
+    import tempfile, os as _o
+
+    # ── Fish Audio ──
+    if FISH_AUDIO_API_KEY:
+        try:
+            r = _requests.post(
+                "https://api.fish.audio/v1/tts",
+                headers={
+                    "Authorization": f"Bearer {FISH_AUDIO_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": text[:500],
+                    "reference_id": FISH_AUDIO_VOICE_ID,
+                    "format": "mp3",
+                    "mp3_bitrate": 128,
+                },
+                timeout=20,
+            )
+            if r.status_code == 200:
+                tmp = tempfile.mktemp(suffix=".mp3")
+                with open(tmp, "wb") as f:
+                    f.write(r.content)
+                _afplay_proc = subprocess.Popen(["afplay", tmp])
+                _afplay_proc.wait()
+                _o.unlink(tmp)
+                return
+            else:
+                print(f"[Fish Audio] 오류 {r.status_code}: {r.text[:100]}")
+        except Exception as e:
+            print(f"[Fish Audio] 오류: {e}")
+
+    # ── Edge TTS 폴백 ──
     try:
-        import edge_tts
+        import asyncio, edge_tts
         tmp = tempfile.mktemp(suffix=".mp3")
-
         async def _tts():
-            communicate = edge_tts.Communicate(text[:500], "en-US-GuyNeural")
-            await communicate.save(tmp)
-
+            await edge_tts.Communicate(text[:500], "en-US-GuyNeural").save(tmp)
         asyncio.run(_tts())
         _afplay_proc = subprocess.Popen(["afplay", tmp])
         _afplay_proc.wait()
-        _os.unlink(tmp)
+        _o.unlink(tmp)
     except Exception as e:
-        print(f"[TTS] Edge TTS 오류: {e}")
-        # 폴백: macOS say
-        try:
-            _afplay_proc = subprocess.Popen(["say", text[:500]])
-            _afplay_proc.wait()
-        except Exception:
-            pass
+        print(f"[TTS] 폴백 오류: {e}")
 
 
 def run_briefing():
