@@ -23,6 +23,13 @@ from typing import Optional
 from flask import Flask, send_file, request, jsonify
 from flask_socketio import SocketIO, emit
 
+# Notion / Obsidian 연동
+try:
+    from jarvis_notion_obsidian import handle_note_command, obsidian_save, obsidian_search
+    _notion_ok = True
+except Exception:
+    _notion_ok = False
+
 # ── Config ────────────────────────────────────────────────────────────────────
 WATCH_SYMBOLS = ["AAPL", "NVDA", "TSLA", "BTC-USD", "^GSPC"]
 WAKE_PHRASES  = ["hey jarvis", "헤이 자비스", "jarvis", "자비스"]
@@ -522,7 +529,30 @@ def on_user_message(data):
     if not text:
         return
     print(f"[chat] user: {text}")
+
+    # 노션/옵시디언 명령어 감지
+    NOTE_KEYWORDS = ["저장해줘","노트해줘","기록해줘","옵시디언","노션에","동기화","노트 찾아","검색해줘"]
+    if _notion_ok and any(k in text for k in NOTE_KEYWORDS):
+        threading.Thread(target=run_note_command, args=(text,), daemon=True).start()
+        return
+
     threading.Thread(target=run_chat, args=(text,), daemon=True).start()
+
+
+def run_note_command(text: str):
+    set_state("speaking")
+    socketio.emit("chat_user", text)
+    try:
+        result = handle_note_command(text)
+        if result:
+            socketio.emit("text_done", result)
+            threading.Thread(target=speak_server, args=(result,), daemon=True).start()
+        else:
+            threading.Thread(target=run_chat, args=(text,), daemon=True).start()
+    except Exception as e:
+        socketio.emit("error", str(e))
+    finally:
+        set_state("idle")
 
 
 def web_search(query: str) -> str:
