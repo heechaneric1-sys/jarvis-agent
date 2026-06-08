@@ -378,7 +378,7 @@ def run_briefing():
         import os as _env_os
         env = {k:v for k,v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(
-            [str(CLAUDE_BIN), "--fast", "-p", prompt, "--allowedTools", "WebSearch,computer"],
+            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         full = ""
@@ -577,13 +577,17 @@ def run_chat(user_text: str):
     set_state("speaking")
     socketio.emit("chat_user", user_text)
 
-    # ── 실시간 웹 검색 ──
+    # ── 실시간 웹 검색 (3초 제한, 없으면 그냥 진행) ──
     import concurrent.futures as _cf
-    with _cf.ThreadPoolExecutor(max_workers=2) as ex:
-        f_web = ex.submit(web_search, user_text)
-        f_yt  = ex.submit(youtube_search, user_text)
-        web_result = f_web.result()
-        yt_result  = f_yt.result()
+    web_result, yt_result = "", ""
+    try:
+        with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+            f_web = ex.submit(web_search, user_text)
+            f_yt  = ex.submit(youtube_search, user_text)
+            web_result = f_web.result(timeout=3)
+            yt_result  = f_yt.result(timeout=3)
+    except Exception:
+        pass   # 검색 느리면 스킵하고 바로 Claude 호출
 
     # ── 컨텍스트 조합 ──
     ctx = ""
@@ -619,7 +623,7 @@ User: {user_text}"""
         import os as _env_os
         env = {k: v for k, v in _env_os.environ.items() if k != "ANTHROPIC_API_KEY"}
         proc = subprocess.Popen(   # 로컬 변수 사용 — 전역 _chat_proc 접근 경쟁 방지
-            [str(CLAUDE_BIN), "--fast", "-p", prompt, "--allowedTools", "WebSearch,computer"],
+            [str(CLAUDE_BIN), "--model", "claude-haiku-4-5-20251001", "-p", prompt, "--allowedTools", "WebSearch,computer"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         _chat_proc = proc          # 외부에서 kill 가능하도록 전역에도 저장
